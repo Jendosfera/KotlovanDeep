@@ -1,0 +1,45 @@
+package com.example.kotlovan
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.kotlovan.ui.*
+import com.example.kotlovan.ui.theme.KotlovanTheme
+import com.example.kotlovan.vm.AppViewModel
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            KotlovanTheme { RootNav() }
+        }
+    }
+}
+
+@Composable
+fun RootNav() {
+    val vm: AppViewModel = viewModel()
+    val nav = rememberNavController()
+
+    NavHost(nav, startDestination = "menu") {
+        composable("menu") { MainMenuScreen(nav, vm) }
+        composable("builder") { ArrayBuilderScreen(nav, vm) }
+        composable("card/{row}/{col}") { back ->
+            val row = back.arguments?.getString("row")?.toInt() ?: 0
+            val col = back.arguments?.getString("col")?.toInt() ?: 0
+            CellCardScreen(nav, vm, row, col)
+        }
+        composable("viewer") { ViewerScreen(nav, vm) }
+        composable("comment/{row}/{col}/{id}") { back ->
+            val row = back.arguments?.getString("row")?.toInt() ?: 0
+            val col = back.arguments?.getString("col")?.toInt() ?: 0
+            val id = back.arguments?.getString("id") ?: ""
+            CommentEditorScreen(nav, vm, row, col, id)
+        }
+    }
+}
