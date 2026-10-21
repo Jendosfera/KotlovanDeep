@@ -1,11 +1,11 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("com.android.application") version "8.2.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.22" apply false
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
 android {
-    namespace = "com.example.kotlovan"
+    namespace = "com.example.kotlovan"version "1.9.22" apply false
     compileSdk = 34
 
     defaultConfig {
