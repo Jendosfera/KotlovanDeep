@@ -7,13 +7,32 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,8 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
-import com.example.kotlovan.util.applyZoom
-import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
 
 private const val CELL_SIZE = 160f
@@ -58,41 +75,39 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Определяем границы отрисованной сетки
     val cells = vm.config.cells
-    val (minR, maxR, minC, maxC) = remember(cells) {
-        if (cells.isEmpty()) intArrayOf(0, -1, 0, -1).let { intArrayOf(0,0,0,0) }
+    val bounds = remember(cells) {
+        if (cells.isEmpty()) intArrayOf(0, 0, 0, 0)
         else {
             val rows = cells.keys.map { it.substringBefore(',').toInt() }
             val cols = cells.keys.map { it.substringAfter(',').toInt() }
             intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
         }
     }
-    // Отрисовываем диапазон: с расширением на 1 во все стороны, чтобы были "плюсы"
+    val minR = bounds[0]; val maxR = bounds[1]
+    val minC = bounds[2]; val maxC = bounds[3]
     val rFrom = minR - 1; val rTo = maxR + 1
     val cFrom = minC - 1; val cTo = maxC + 1
 
     Box(Modifier.fillMaxSize().background(Color(0xFFECEFF1))) {
 
-        // Сетка
+        // Сетка с простым pan/zoom
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = offset.x; translationY = offset.y; scaleX = scale; scaleY = scale }
+                .graphicsLayer {
+                    translationX = offset.x
+                    translationY = offset.y
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .pointerInput(Unit) {
-                    detectViewerGestures(
-                        onTransform = { c, p, z ->
-                            val (s, ox, oy) = applyZoom(scale, offset.x, offset.y, c, p, z)
-                            scale = s; offset = Offset(ox, oy)
-                        },
-                        onSwipe = { _, _ -> }
-                    )
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(0.3f, 3f)
+                        offset += pan
+                    }
                 }
         ) {
-            // расположим ячейки в сетку относительно центра
-            val totalW = (cTo - cFrom + 1) * (CELL_SIZE + CELL_GAP)
-            val totalH = (rTo - rFrom + 1) * (CELL_SIZE + CELL_GAP)
-            // отрисовка от (0,0) — Compose Box с абсолютными смещениями
             for (r in rFrom..rTo) for (c in cFrom..cTo) {
                 val data = vm.cell(r, c)
                 val x = (c - cFrom) * (CELL_SIZE + CELL_GAP)
@@ -133,7 +148,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
-        // верхняя панель
+        // Верхняя панель
         Row(
             Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -145,7 +160,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             Spacer(Modifier.weight(1f))
         }
 
-        // нижняя панель
+        // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
                 Button(
@@ -160,7 +175,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Автосохранение при уходе
     DisposableEffect(Unit) {
         onDispose { vm.autosave() }
     }
@@ -193,10 +207,19 @@ private fun CreatedCell(
             }
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(data.title.ifBlank { "Без названия" }, maxLines = 1,
-                style = MaterialTheme.typography.bodySmall)
+            Text(
+                data.title.ifBlank { "Без названия" },
+                maxLines = 1,
+                style = MaterialTheme.typography.bodySmall
+            )
             Spacer(Modifier.height(4.dp))
-            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFFCFD8DC))) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFCFD8DC))
+            ) {
                 data.imageUri?.let { uriStr ->
                     AsyncImage(
                         model = android.net.Uri.parse(uriStr),
