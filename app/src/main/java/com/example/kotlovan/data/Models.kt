@@ -3,13 +3,18 @@ package com.example.kotlovan.data
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class CommentIconType { CIRCLE, SQUARE, TRIANGLE, DIAMOND, ROSETTE, PHONE, COMPUTER }
+
+@Serializable
 data class CommentPin(
     val id: String,
-    val x: Float,          // 0..1 нормализованные координаты на изображении
+    val x: Float,
     val y: Float,
-    val radius: Float,     // 0..1 нормализованный радиус
+    val radius: Float,                          // доля от ширины картинки (fitW)
     val title: String = "",
-    val text: String = ""
+    val text: String = "",
+    val color: Long = 0xFFFF5722L,              // ARGB
+    val iconType: CommentIconType = CommentIconType.CIRCLE
 )
 
 @Serializable
