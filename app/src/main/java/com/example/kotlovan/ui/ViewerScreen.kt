@@ -184,31 +184,29 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 (inSpec togetherWith outSpec).using(SizeTransform(clip = false))
             },
             label = "cellSwipe"
-        ) { key ->
-            val parts = key.split(",")
-            val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
-            val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val uriStr = vm.cell(r, c)?.imageUri
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = offset.x
-                        translationY = offset.y
-                        scaleX = scale
-                        scaleY = scale
-                    }
-            ) {
-                if (file != null) {
-                    AsyncImage(
-                        model = android.net.Uri.parse(uriStr),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        }
+		) { key ->
+			val parts = key.split(",")
+			val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
+			val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
+			val uriStr = vm.cell(r, c)?.imageUri         // ← НОВАЯ
+			Box(
+				Modifier
+					.fillMaxSize()
+					.graphicsLayer {
+						translationX = offset.x; translationY = offset.y
+						scaleX = scale; scaleY = scale
+					}
+			) {
+				if (uriStr != null) {                     // ← НОВАЯ
+					AsyncImage(
+						model = android.net.Uri.parse(uriStr),  // ← НОВАЯ
+						contentDescription = null,
+						contentScale = ContentScale.Fit,
+						modifier = Modifier.fillMaxSize()
+					)
+				}
+			}
+		}
 
         // Кружки комментариев (п.2/3): обычный for, а не forEach
         if (currentCell != null) {

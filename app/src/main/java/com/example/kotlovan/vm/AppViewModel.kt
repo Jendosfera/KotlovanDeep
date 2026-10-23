@@ -21,41 +21,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hasUnsavedChanges by mutableStateOf(false)
         private set
 
-	init {
-		val loaded = repo.loadAutosave()
-		if (loaded != null) config = normalize(loaded)
-	}
-	
-	fun load(uri: android.net.Uri): Boolean {
-		val c = repo.loadFromUri(uri) ?: return false
-		config = normalize(c)
-		hasUnsavedChanges = false
-		return true
-	}
-
-	/** Восстанавливает права на изображения и подтягивает недостающие размеры. */
-	private fun normalize(src: ArrayConfig): ArrayConfig {
-		val fixed = src.cells.mapValues { (_, cell) ->
-			val u = cell.imageUri
-			if (u == null) return@mapValues cell
-			val parsed = android.net.Uri.parse(u)
-			repo.takePersistablePermission(parsed)   // no-op, если права уже есть или их нельзя взять
-			if (cell.imageWidth == 0) {
-				val sz = repo.getImageSize(parsed)
-				if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
-			} else cell
-		}
-		return src.copy(cells = fixed)
-	}
+    init {
+        val loaded = repo.loadAutosave()
+        if (loaded != null) config = normalize(loaded)
+    }
 
     fun newArray() {
         config = ArrayConfig()
         hasUnsavedChanges = true
     }
 
+    /** Единственная точка загрузки JSON из SAF. */
     fun load(uri: Uri): Boolean {
         val c = repo.loadFromUri(uri) ?: return false
-        config = c
+        config = normalize(c)
         hasUnsavedChanges = false
         return true
     }
@@ -95,8 +74,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setGlobalViewport(scale: Float, ox: Float, oy: Float, r: Int, c: Int) {
-        config = config.copy(globalScale = scale, globalOffsetX = ox, globalOffsetY = oy,
-            lastRow = r, lastCol = c)
+        config = config.copy(
+            globalScale = scale,
+            globalOffsetX = ox,
+            globalOffsetY = oy,
+            lastRow = r,
+            lastCol = c
+        )
         hasUnsavedChanges = true
     }
 
@@ -111,5 +95,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)
         hasUnsavedChanges = true
+    }
+
+    /** Восстанавливает persistable-права и размеры картинок по URI. */
+    private fun normalize(src: ArrayConfig): ArrayConfig {
+        val fixed = src.cells.mapValues { (_, cell) ->
+            val u = cell.imageUri
+            if (u == null) return@mapValues cell
+            val parsed = Uri.parse(u)
+            repo.takePersistablePermission(parsed)
+            if (cell.imageWidth == 0) {
+                val sz = repo.getImageSize(parsed)
+                if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second)
+                else cell
+            } else cell
+        }
+        return src.copy(cells = fixed)
     }
 }
