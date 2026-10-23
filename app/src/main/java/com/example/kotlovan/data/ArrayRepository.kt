@@ -6,6 +6,7 @@ import android.util.Log
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
+import android.graphics.BitmapFactory
 
 class ArrayRepository(private val context: Context) {
 
@@ -27,18 +28,30 @@ class ArrayRepository(private val context: Context) {
 
     fun imageFile(name: String): File = File(imagesDir, name)
 
+	fun getImageSize(fileName: String): Pair<Int, Int>? {
+		val f = File(imagesDir, fileName)
+		if (!f.exists()) return null
+		val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+		android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
+		return if (opts.outWidth > 0) opts.outWidth to opts.outHeight else null
+	}
+
     fun saveToUri(config: ArrayConfig, uri: Uri): Boolean = try {
         val text = json.encodeToString(ArrayConfig.serializer(), config)
         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) }
         true
     } catch (e: Exception) { Log.e("Kotlovan","saveToUri",e); false }
 
-    fun loadFromUri(uri: Uri): ArrayConfig? = try {
+    fun loadFromUri(uri: Uri): ArrayConfig? {
+    return try {
         val text = context.contentResolver.openInputStream(uri)
             ?.bufferedReader()?.use { it.readText() } ?: return null
         json.decodeFromString(ArrayConfig.serializer(), text)
-    } catch (e: Exception) { Log.e("Kotlovan","loadFromUri",e); null }
-
+    } catch (e: Exception) {
+        Log.e("Kotlovan", "loadFromUri", e)
+        null
+    }
+}
     fun autosave(config: ArrayConfig) {
         prefs.edit().putString("autosave", json.encodeToString(ArrayConfig.serializer(), config)).apply()
     }

@@ -15,10 +15,12 @@ data class CommentPin(
 @Serializable
 data class CellData(
     val title: String = "",
-    val imageFile: String? = null,     // имя файла внутри filesDir/cell_images
+    val imageFile: String? = null,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0,
     val comments: List<CommentPin> = emptyList(),
-    val ownPosition: Boolean = false,  // "Свое положение"
-    val commonX: Float = 0.5f,         // "Общая точка"
+    val ownPosition: Boolean = false,
+    val commonX: Float = 0.5f,
     val commonY: Float = 0.5f,
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,

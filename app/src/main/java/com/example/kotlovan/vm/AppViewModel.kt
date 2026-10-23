@@ -22,8 +22,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     init {
-        repo.loadAutosave()?.let { config = it }
-    }
+		val loaded = repo.loadAutosave()
+		if (loaded != null) {
+			val fixed = loaded.copy(cells = loaded.cells.mapValues { (_, c) ->
+				if (c.imageWidth == 0 && c.imageFile != null) {
+					val sz = repo.getImageSize(c.imageFile)
+					if (sz != null) c.copy(imageWidth = sz.first, imageHeight = sz.second) else c
+				} else c
+			})
+			config = fixed
+		}
+	}
 
     fun newArray() {
         config = ArrayConfig()
