@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -34,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
@@ -43,11 +42,10 @@ import com.example.kotlovan.vm.AppViewModel
 
 @Composable
 fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int) {
-    val ctx = LocalContext.current
     val existing = vm.cell(row, col)
 
     var title by remember { mutableStateOf(existing?.title ?: "") }
-    var imageName by remember { mutableStateOf(existing?.imageFile) }
+    var imageUri by remember { mutableStateOf(existing?.imageUri) }
     var imgW by remember { mutableIntStateOf(existing?.imageWidth ?: 0) }
     var imgH by remember { mutableIntStateOf(existing?.imageHeight ?: 0) }
 
@@ -55,17 +53,12 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            try {
-                ctx.contentResolver.takePersistableUriPermission(
-                    uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {}
-            vm.repo.importImage(uri)?.let { name ->
-                imageName = name
-                vm.repo.getImageSize(name)?.let { (w, h) ->
-                    imgW = w
-                    imgH = h
-                }
+            // Даём приложению постоянный доступ к выбранному файлу
+            vm.repo.takePersistablePermission(uri)
+            imageUri = uri.toString()
+            vm.repo.getImageSize(uri)?.let { (w, h) ->
+                imgW = w
+                imgH = h
             }
         }
     }
@@ -93,9 +86,10 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                 .background(Color(0xFFECEFF1)),
             contentAlignment = Alignment.Center
         ) {
-            if (imageName != null) {
+            val uriStr = imageUri
+            if (uriStr != null) {
                 AsyncImage(
-                    model = vm.repo.imageFile(imageName!!),
+                    model = Uri.parse(uriStr),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
@@ -119,7 +113,7 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                         row, col,
                         (existing ?: CellData()).copy(
                             title = title,
-                            imageFile = imageName,
+                            imageUri = imageUri,
                             imageWidth = imgW,
                             imageHeight = imgH
                         )

@@ -21,17 +21,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hasUnsavedChanges by mutableStateOf(false)
         private set
 
-    init {
+	init {
 		val loaded = repo.loadAutosave()
-		if (loaded != null) {
-			val fixed = loaded.copy(cells = loaded.cells.mapValues { (_, c) ->
-				if (c.imageWidth == 0 && c.imageFile != null) {
-					val sz = repo.getImageSize(c.imageFile)
-					if (sz != null) c.copy(imageWidth = sz.first, imageHeight = sz.second) else c
-				} else c
-			})
-			config = fixed
+		if (loaded != null) config = normalize(loaded)
+	}
+	
+	fun load(uri: android.net.Uri): Boolean {
+		val c = repo.loadFromUri(uri) ?: return false
+		config = normalize(c)
+		hasUnsavedChanges = false
+		return true
+	}
+
+	/** Восстанавливает права на изображения и подтягивает недостающие размеры. */
+	private fun normalize(src: ArrayConfig): ArrayConfig {
+		val fixed = src.cells.mapValues { (_, cell) ->
+			val u = cell.imageUri
+			if (u == null) return@mapValues cell
+			val parsed = android.net.Uri.parse(u)
+			repo.takePersistablePermission(parsed)   // no-op, если права уже есть или их нельзя взять
+			if (cell.imageWidth == 0) {
+				val sz = repo.getImageSize(parsed)
+				if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
+			} else cell
 		}
+		return src.copy(cells = fixed)
 	}
 
     fun newArray() {

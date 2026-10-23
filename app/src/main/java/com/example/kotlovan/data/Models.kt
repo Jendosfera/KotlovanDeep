@@ -15,7 +15,7 @@ data class CommentPin(
 @Serializable
 data class CellData(
     val title: String = "",
-    val imageFile: String? = null,
+    val imageUri: String? = null,      // content:// URI исходного файла
     val imageWidth: Int = 0,
     val imageHeight: Int = 0,
     val comments: List<CommentPin> = emptyList(),
@@ -26,7 +26,6 @@ data class CellData(
     val ownOffsetX: Float = 0f,
     val ownOffsetY: Float = 0f
 )
-
 @Serializable
 data class ArrayConfig(
     val name: String = "Массив",

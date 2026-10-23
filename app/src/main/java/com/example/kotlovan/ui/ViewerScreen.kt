@@ -188,7 +188,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             val parts = key.split(",")
             val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
             val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val file = vm.cell(r, c)?.imageFile
+            val uriStr = vm.cell(r, c)?.imageUri
             Box(
                 Modifier
                     .fillMaxSize()
@@ -201,7 +201,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             ) {
                 if (file != null) {
                     AsyncImage(
-                        model = vm.repo.imageFile(file),
+                        model = android.net.Uri.parse(uriStr),
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()

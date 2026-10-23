@@ -197,9 +197,9 @@ private fun CreatedCell(
                 style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFFCFD8DC))) {
-                data.imageFile?.let { name ->
+                data.imageUri?.let { uriStr ->
                     AsyncImage(
-                        model = vm.repo.imageFile(name),
+                        model = android.net.Uri.parse(uriStr),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
