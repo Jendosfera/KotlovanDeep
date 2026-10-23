@@ -70,6 +70,8 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 
 private enum class EyeMode { STANDARD, BLINKING, UNIFORM }
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
@@ -360,16 +362,31 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             if (subMode == ViewerSubMode.PLACE_COMMENT) {
                 BlinkingDot(modifier = Modifier.align(Alignment.Center))
                 IconButton(
-                    onClick = {
-                        val cell = vm.cell(row, col)
-                        if (cell != null) {
-                            val id = UUID.randomUUID().toString()
-                            val newPin = CommentPin(id = id, x = 0.5f, y = 0.5f, radius = 0.04f)
-                            vm.setComments(row, col, cell.comments + newPin)
-                            subMode = ViewerSubMode.VIEW
-                            nav.navigate("comment/$row/$col/$id")
-                        }
-                    },
+					onClick = {
+						val cell = vm.cell(row, col)
+						if (cell != null) {
+					        // Точка картинки под центром экрана
+					        val centerX = containerW / 2f
+					        val centerY = containerH / 2f
+					        val imgX = (centerX - offset.x) / scale
+					        val imgY = (centerY - offset.y) / scale
+					        val nx = (imgX / fitW).coerceIn(0f, 1f)
+					        val ny = (imgY / fitH).coerceIn(0f, 1f)
+					
+					        val id = UUID.randomUUID().toString()
+					        val newPin = CommentPin(
+					            id = id,
+					            x = nx,
+					            y = ny,
+					            radius = 0.04f,
+					            title = "",
+					            text = ""
+					        )
+					        vm.setComments(row, col, cell.comments + newPin)
+					        subMode = ViewerSubMode.VIEW
+					        nav.navigate("comment/$row/$col/$id")
+					    }
+					},
                     modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
                 ) {
                     Icon(Icons.Default.Check, "Подтвердить", tint = Color.White, modifier = iconMod)
@@ -448,6 +465,7 @@ private fun CommentPinOverlay(
     }
     val alpha = if (eyeMode == EyeMode.BLINKING) blink else 0.9f
 
+    // Кружок
     Box(
         Modifier
             .offset {
@@ -462,9 +480,29 @@ private fun CommentPinOverlay(
             .background(Color(0xCCFF5722))
             .pointerInput(pin.id) {
                 detectTapGestures(
-                    onDoubleTap = { /* TODO: Toast с pin.text */ },
-                    onLongPress = { onOpen() }
+                    onDoubleTap = { onOpen() },   // ← открывает редактор
+                    onLongPress = { onOpen() }    // fallback
                 )
             }
     )
+
+    // Название над кружком — пропорционально размеру
+    if (pin.title.isNotBlank()) {
+        val titleFontPx = (diameterPx * 0.4f).coerceAtLeast(with(density) { 10.dp.toPx() })
+        Text(
+            text = pin.title,
+            color = Color.White,
+            fontSize = with(density) { titleFontPx.toSp() },
+            maxLines = 1,
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        (screenX - diameterPx / 2f).toInt(),
+                        (screenY - diameterPx / 2f - titleFontPx - 6f).toInt()
+                    )
+                }
+                .background(Color(0xAA000000), RoundedCornerShape(4.dp))
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+    }
 }
