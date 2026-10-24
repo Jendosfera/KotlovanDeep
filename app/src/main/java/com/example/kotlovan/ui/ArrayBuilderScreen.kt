@@ -1,6 +1,5 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.ui.platform.LocalDensity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -43,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
@@ -55,6 +55,7 @@ private const val CELL_GAP = 24f
 @Composable
 fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
+    val density = LocalDensity.current
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var longPressMode by remember { mutableStateOf(false) }
@@ -90,9 +91,13 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
     val rFrom = minR - 1; val rTo = maxR + 1
     val cFrom = minC - 1; val cTo = maxC + 1
 
+    val cellSizeDp = CELL_SIZE.dp
+    val cellGapDp = CELL_GAP.dp
+    val cellSizePx = with(density) { cellSizeDp.toPx() }
+    val cellGapPx = with(density) { cellGapDp.toPx() }
+
     Box(Modifier.fillMaxSize().background(Color(0xFFECEFF1))) {
 
-        // Сетка с простым pan/zoom
         Box(
             Modifier
                 .fillMaxSize()
@@ -109,28 +114,45 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
                     }
                 }
         ) {
-            val density = LocalDensity.current
-            val cellSizeDp = CELL_SIZE.dp
-            val cellGapDp = CELL_GAP.dp
-            val cellSizePx = with(density) { cellSizeDp.toPx() }
-            val cellGapPx = with(density) { cellGapDp.toPx() }
-            
             for (r in rFrom..rTo) for (c in cFrom..cTo) {
                 val data = vm.cell(r, c)
                 val xPx = (c - cFrom) * (cellSizePx + cellGapPx)
                 val yPx = (r - rFrom) * (cellSizePx + cellGapPx)
                 val isPlus = data == null && hasNeighbor(r, c, cells)
                 val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
-            
+
                 Box(
                     Modifier
                         .graphicsLayer { translationX = xPx; translationY = yPx }
                         .size(cellSizeDp)
-                ) { … }
+                ) {
+                    when {
+                        data != null -> CreatedCell(
+                            data = data,
+                            isSwapTarget = longPressMode && selectedForSwap != null &&
+                                    (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
+                            onClick = {
+                                if (longPressMode) {
+                                    if (selectedForSwap == null) selectedForSwap = r to c
+                                    else {
+                                        vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
+                                        selectedForSwap = null; longPressMode = false
+                                    }
+                                }
+                            },
+                            onDoubleTap = { nav.navigate("card/$r/$c") },
+                            onLongPress = {
+                                longPressMode = true
+                                selectedForSwap = r to c
+                                Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        isPlus || isEmptyStart -> PlusButton { nav.navigate("card/$r/$c") }
+                    }
+                }
             }
         }
 
-        // Верхняя панель
         Row(
             Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -142,7 +164,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             Spacer(Modifier.weight(1f))
         }
 
-        // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
                 Button(
@@ -169,7 +190,7 @@ private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
 
 @Composable
 private fun CreatedCell(
-    data: CellData, vm: AppViewModel, isSwapTarget: Boolean,
+    data: CellData, isSwapTarget: Boolean,
     onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
 ) {
     Card(

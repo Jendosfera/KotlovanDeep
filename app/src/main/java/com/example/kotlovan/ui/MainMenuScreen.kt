@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,7 +37,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
     var showReconnectDialog by remember { mutableStateOf(false) }
     var reconnectIdx by remember { mutableIntStateOf(0) }
 
-    // Загрузка JSON
     val loadLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -48,6 +48,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             } catch (_: Exception) {}
             if (vm.load(uri)) {
                 if (vm.pendingReconnect.isNotEmpty()) {
+                    reconnectIdx = 0
                     showReconnectDialog = true
                 } else {
                     nav.navigate("builder")
@@ -58,18 +59,22 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Переподключение URI картинки
+    // Лямбда НЕ ссылается на reconnectLauncher — обошли self-reference
     val reconnectLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            val (r, c) = vm.pendingReconnect[reconnectIdx]
-            vm.reconnectImage(r, c, uri)
+            val item = vm.pendingReconnect.getOrNull(reconnectIdx)
+            if (item != null) vm.reconnectImage(item.first, item.second, uri)
         }
         reconnectIdx++
-        if (reconnectIdx < vm.pendingReconnect.size) {
-            reconnectLauncher.launch(arrayOf("image/*"))
-        } else {
+        // Если всё обработано — LaunchedEffect ниже закроет диалог и перейдёт в builder
+    }
+
+    // Когда все ячейки пройдены — закрываем диалог и идём в builder
+    LaunchedEffect(showReconnectDialog, reconnectIdx, vm.pendingReconnect.size) {
+        if (showReconnectDialog && reconnectIdx >= vm.pendingReconnect.size && vm.pendingReconnect.isNotEmpty()) {
+            showReconnectDialog = false
             reconnectIdx = 0
             vm.clearPendingReconnect()
             nav.navigate("builder")
@@ -94,7 +99,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         ) { Text("Загрузить массив", fontSize = 20.sp) }
     }
 
-    if (showReconnectDialog) {
+    if (showReconnectDialog && reconnectIdx < vm.pendingReconnect.size) {
         val total = vm.pendingReconnect.size
         val current = reconnectIdx + 1
         AlertDialog(
@@ -103,19 +108,19 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Text(
                     "После переустановки приложения $total изображений потеряли доступ. " +
-                    "Выберите их заново, чтобы приложение снова могло их показывать."
+                    "Выберите их заново, чтобы приложение снова могло их показывать. " +
+                    "Файл $current из $total."
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showReconnectDialog = false
-                    reconnectIdx = 0
-                    reconnectLauncher.launch(arrayOf("image/*"))
-                }) { Text("Выбрать файлы ($current / $total)") }
+                TextButton(onClick = { reconnectLauncher.launch(arrayOf("image/*")) }) {
+                    Text("Выбрать файл")
+                }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showReconnectDialog = false
+                    reconnectIdx = 0
                     vm.clearPendingReconnect()
                     nav.navigate("builder")
                 }) { Text("Пропустить") }
