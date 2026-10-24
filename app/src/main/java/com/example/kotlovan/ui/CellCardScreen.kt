@@ -45,6 +45,7 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
     val existing = vm.cell(row, col)
 
     var title by remember { mutableStateOf(existing?.title ?: "") }
+    var titleTouched by remember { mutableStateOf(!existing?.title.isNullOrBlank()) }
     var imageUri by remember { mutableStateOf(existing?.imageUri) }
     var imgW by remember { mutableIntStateOf(existing?.imageWidth ?: 0) }
     var imgH by remember { mutableIntStateOf(existing?.imageHeight ?: 0) }
@@ -53,71 +54,57 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            // Даём приложению постоянный доступ к выбранному файлу
             vm.repo.takePersistablePermission(uri)
             imageUri = uri.toString()
-            vm.repo.getImageSize(uri)?.let { (w, h) ->
-                imgW = w
-                imgH = h
+            vm.repo.getImageSize(uri)?.let { (w, h) -> imgW = w; imgH = h }
+            // Если пользователь ещё не вводил название — берём имя файла
+            if (!titleTouched) {
+                vm.repo.getDisplayName(uri)?.let { title = it }
             }
         }
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav.popBackStack() }) {
-                Icon(Icons.Default.ArrowBack, "Назад")
-            }
+            IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Назад") }
             Text("Ячейка [$row,$col]", style = MaterialTheme.typography.titleLarge)
         }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = title,
-            onValueChange = { title = it },
+            onValueChange = { title = it; titleTouched = true },
             label = { Text("Название") },
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(16.dp))
         Box(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFECEFF1)),
+            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(12.dp)).background(Color(0xFFECEFF1)),
             contentAlignment = Alignment.Center
         ) {
-            val uriStr = imageUri
-            if (uriStr != null) {
+            val u = imageUri
+            if (u != null) {
                 AsyncImage(
-                    model = Uri.parse(uriStr),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    model = Uri.parse(u), contentDescription = null,
+                    contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()
                 )
             } else {
                 Text("Изображение не загружено", color = Color.Gray)
             }
         }
         Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { pickLauncher.launch(arrayOf("image/*")) },
                 modifier = Modifier.weight(1f).height(56.dp)
             ) { Text("Загрузить") }
             Button(
                 onClick = {
-                    vm.upsertCell(
-                        row, col,
-                        (existing ?: CellData()).copy(
-                            title = title,
-                            imageUri = imageUri,
-                            imageWidth = imgW,
-                            imageHeight = imgH
-                        )
-                    )
+                    val base = existing ?: CellData().let {
+                        if (vm.useAux) it.copy(ownPosition = true) else it
+                    }
+                    vm.upsertCell(row, col, base.copy(
+                        title = title, imageUri = imageUri, imageWidth = imgW, imageHeight = imgH
+                    ))
                     nav.popBackStack()
                 },
                 modifier = Modifier.weight(1f).height(56.dp)

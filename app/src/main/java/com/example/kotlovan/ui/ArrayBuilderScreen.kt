@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,14 +62,20 @@ private const val CELL_SIZE = 160f
 private const val CELL_GAP = 24f
 
 @Composable
-fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
+fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
-    var scale by remember { mutableStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
+
+    // Синхронизируем режим VM с параметром навигации
+    LaunchedEffect(aux) { vm.setUseAux(aux) }
+
+    var scale by remember(aux) { mutableStateOf(1f) }
+    var offset by remember(aux) { mutableStateOf(Offset.Zero) }
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var initialized by remember { mutableStateOf(false) }
+    var initialized by remember(aux) { mutableStateOf(false) }
+
+    val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -84,11 +92,11 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFFECEFF1))) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(bgColor)) {
         val containerW = constraints.maxWidth.toFloat()
         val containerH = constraints.maxHeight.toFloat()
 
-        val cells = vm.config.cells
+        val cells = vm.active.cells
         val bounds = remember(cells) {
             if (cells.isEmpty()) intArrayOf(0, 0, 0, 0)
             else {
@@ -105,51 +113,41 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
         val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
         val step = cellSizePx + cellGapPx
-        val colsCount = cTo - cFrom + 1
-        val rowsCount = rTo - rFrom + 1
-        val totalW = colsCount * step - cellGapPx
-        val totalH = rowsCount * step - cellGapPx
+        val totalW = (cTo - cFrom + 1) * step - cellGapPx
+        val totalH = (rTo - rFrom + 1) * step - cellGapPx
 
-        // Центрирование на первой (или последней) ячейке при первом показе
         LaunchedEffect(Unit) {
             if (!initialized) {
-                val targetRow = vm.config.lastRow
-                val targetCol = vm.config.lastCol
-                val cxContent = (targetCol - cFrom) * step + cellSizePx / 2f
-                val cyContent = (targetRow - rFrom) * step + cellSizePx / 2f
-                offset = Offset(containerW / 2f - cxContent, containerH / 2f - cyContent)
+                val targetRow = vm.active.lastRow
+                val targetCol = vm.active.lastCol
+                val cx = (targetCol - cFrom) * step + cellSizePx / 2f
+                val cy = (targetRow - rFrom) * step + cellSizePx / 2f
+                offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
                 initialized = true
             }
         }
 
-        // Жесты ловятся на всей неподвижной области
         Box(
             Modifier
                 .fillMaxSize()
                 .pointerInput(totalW, totalH, containerW, containerH) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, offset) },
-                        fitW = totalW,
-                        fitH = totalH,
-                        containerW = containerW,
-                        containerH = containerH,
+                        fitW = totalW, fitH = totalH,
+                        containerW = containerW, containerH = containerH,
                         onTransform = { vp -> scale = vp.scale; offset = vp.offset },
                         onSwipe = { _, _ -> },
-                        minScale = 0.2f,
-                        maxScale = 5f
+                        minScale = 0.2f, maxScale = 5f
                     )
                 }
         ) {
-            // Внутренний контейнер с масштабом/смещением
             Box(
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
                         transformOrigin = TransformOrigin(0f, 0f)
-                        translationX = offset.x
-                        translationY = offset.y
-                        scaleX = scale
-                        scaleY = scale
+                        translationX = offset.x; translationY = offset.y
+                        scaleX = scale; scaleY = scale
                     }
             ) {
                 for (r in rFrom..rTo) for (c in cFrom..cTo) {
@@ -158,8 +156,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
                     val yPx = (r - rFrom) * step
                     val isPlus = data == null && hasNeighbor(r, c, cells)
                     val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
-                    val isSelected = data != null &&
-                            vm.config.lastRow == r && vm.config.lastCol == c
+                    val isSelected = data != null && vm.active.lastRow == r && vm.active.lastCol == c
 
                     Box(
                         Modifier
@@ -197,16 +194,27 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
-        // Верхняя панель
+        // Верхняя панель: назад, замок
         Row(
             Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = {
                 vm.autosave()
-                nav.popBackStack("menu", false)
+                nav.popBackStack()
             }) { Icon(Icons.Default.ArrowBack, "Назад") }
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = {
+                if (aux) nav.navigate("builder?aux=false") {
+                    popUpTo("builder?aux=true") { inclusive = true }
+                }
+                else nav.navigate("builder?aux=true")
+            }) {
+                Icon(
+                    if (aux) Icons.Default.LockOpen else Icons.Default.Lock,
+                    if (aux) "Главный массив" else "Вспомогательный массив"
+                )
+            }
         }
 
         // Нижняя панель
@@ -224,21 +232,19 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
                 ) { Text("Сохранить массив") }
                 Button(
                     onClick = {
-                        if (vm.config.cells.isNotEmpty()) {
+                        if (vm.active.cells.isNotEmpty()) {
                             vm.autosave()
                             nav.navigate("viewer")
                         }
                     },
-                    enabled = vm.config.cells.isNotEmpty(),
+                    enabled = vm.active.cells.isNotEmpty(),
                     modifier = Modifier.weight(1f).height(56.dp)
                 ) { Text("Просмотр") }
             }
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { vm.autosave() }
-    }
+    DisposableEffect(Unit) { onDispose { vm.autosave() } }
 }
 
 private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
@@ -248,15 +254,11 @@ private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
 
 @Composable
 private fun CreatedCell(
-    data: CellData,
-    isSelected: Boolean,
-    isSwapTarget: Boolean,
-    onClick: () -> Unit,
-    onDoubleTap: () -> Unit,
-    onLongPress: () -> Unit
+    data: CellData, isSelected: Boolean, isSwapTarget: Boolean,
+    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
 ) {
     val borderColor = when {
-        isSelected -> Color(0xFF00C853)   // зелёная обводка — выбранная
+        isSelected -> Color(0xFF00C853)
         isSwapTarget -> Color(0xFFFFE082)
         else -> Color.Transparent
     }
@@ -268,8 +270,7 @@ private fun CreatedCell(
         modifier = Modifier
             .fillMaxSize()
             .then(
-                if (isSelected || isSwapTarget)
-                    Modifier.border(3.dp, borderColor, shape)
+                if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape)
                 else Modifier
             )
             .pointerInput(Unit) {
@@ -281,25 +282,13 @@ private fun CreatedCell(
             }
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(
-                data.title.ifBlank { "Без названия" },
-                maxLines = 1,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(data.title.ifBlank { "Без названия" }, maxLines = 1, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFCFD8DC))
-            ) {
-                data.imageUri?.let { uriStr ->
+            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFFCFD8DC))) {
+                data.imageUri?.let { u ->
                     AsyncImage(
-                        model = android.net.Uri.parse(uriStr),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        model = android.net.Uri.parse(u), contentDescription = null,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                     )
                 }
             }

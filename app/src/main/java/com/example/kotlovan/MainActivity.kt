@@ -11,6 +11,8 @@ import androidx.navigation.compose.rememberNavController
 import com.example.kotlovan.ui.*
 import com.example.kotlovan.ui.theme.KotlovanTheme
 import com.example.kotlovan.vm.AppViewModel
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,7 +30,16 @@ fun RootNav() {
 
     NavHost(nav, startDestination = "menu") {
         composable("menu") { MainMenuScreen(nav, vm) }
-        composable("builder") { ArrayBuilderScreen(nav, vm) }
+        composable(
+            route = "builder?aux={aux}",
+            arguments = listOf(navArgument("aux") {
+                type = NavType.BoolType
+                defaultValue = false
+            })
+        ) { back ->
+            val aux = back.arguments?.getBoolean("aux") ?: false
+            ArrayBuilderScreen(nav, vm, aux)
+        }
         composable("card/{row}/{col}") { back ->
             val row = back.arguments?.getString("row")?.toInt() ?: 0
             val col = back.arguments?.getString("col")?.toInt() ?: 0
