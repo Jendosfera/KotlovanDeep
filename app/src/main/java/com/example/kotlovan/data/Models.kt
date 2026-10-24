@@ -66,3 +66,15 @@ data class ArrayConfig(
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )
+@Serializable
+data class LinkReturnState(
+    val isAux: Boolean,
+    val row: Int,
+    val col: Int,
+    val scale: Float,
+    val offX: Float,
+    val offY: Float,
+    val commentRow: Int,
+    val commentCol: Int,
+    val commentId: String
+)

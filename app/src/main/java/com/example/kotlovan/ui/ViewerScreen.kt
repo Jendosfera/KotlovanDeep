@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -78,6 +79,8 @@ import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
+import com.example.kotlovan.data.LinkReturnState
+import com.example.kotlovan.data.PinLink
 import com.example.kotlovan.util.Flashlight
 import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.clampOffset
@@ -92,17 +95,14 @@ import kotlin.math.sqrt
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
 
-private data class LinkReturn(
-    val isAux: Boolean, val row: Int, val col: Int,
-    val scale: Float, val offX: Float, val offY: Float
-)
-
 private data class PendingJump(val x: Float, val y: Float, val scale: Float)
 
 private val BlinkColors = listOf(
     Color(0xFFFF5722), Color(0xFF4CAF50), Color(0xFF2196F3),
     Color(0xFF9C27B0), Color(0xFFFFEB3B)
 )
+
+private val LinkBorderColor = Color(0xFF00C853)
 
 @Composable
 fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
@@ -121,14 +121,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var swipeDir by remember { mutableStateOf(SwipeDir.NONE) }
     var showSettings by remember { mutableStateOf(false) }
     var iconsHidden by remember { mutableStateOf(false) }
-    var linkReturn by remember { mutableStateOf<LinkReturn?>(null) }
     var pendingJump by remember { mutableStateOf<PendingJump?>(null) }
     var visibleTitles by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
 
-    // Автоочистка названий
+    val inLinkMode = vm.linkReturn != null
+
+    // Автоочистка названий через 5 сек
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
@@ -137,7 +138,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .then(
+                if (inLinkMode) Modifier.border(6.dp, LinkBorderColor)
+                else Modifier
+            )
+    ) {
         val containerW = constraints.maxWidth.toFloat()
         val containerH = constraints.maxHeight.toFloat()
         val density = LocalDensity.current
@@ -149,18 +158,67 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
-        val offset = Offset(offsetX, offsetY)
-
         val baseIconDp = 28.dp * cfg.iconSize
         val iconMod = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
 
-        // Диапазоны для панелей строк/столбцов
         val allRows = vm.active.cells.keys.map { it.substringBefore(',').toInt() }
         val allCols = vm.active.cells.keys.map { it.substringAfter(',').toInt() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
 
-        LaunchedEffect(row, col, fitW, fitH) {
+        // Локальные функции для перехода/возврата по ссылке
+        fun persistViewport() {
+            val c = vm.cell(row, col) ?: return
+            val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
+            val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
+            if (c.ownPosition) {
+                vm.updateCell(row, col) { it.copy(ownScale = scale, ownOffsetX = vOx, ownOffsetY = vOy) }
+            } else {
+                vm.setGlobalViewport(scale, vOx, vOy, row, col)
+            }
+        }
+
+        fun returnFromLink() {
+            val lr = vm.linkReturn ?: return
+            vm.useAux = lr.isAux
+            savedRow = lr.row; savedCol = lr.col
+            row = lr.row; col = lr.col
+            scale = lr.scale
+            offsetX = lr.offX; offsetY = lr.offY
+            vm.linkReturn = null
+        }
+
+        fun jumpToLink(
+            link: PinLink,
+            sourceRow: Int,
+            sourceCol: Int,
+            sourceId: String,
+            keepReturn: Boolean = false
+        ) {
+            if (!keepReturn) {
+                vm.linkReturn = LinkReturnState(
+                    isAux = vm.useAux, row = row, col = col,
+                    scale = scale, offX = offsetX, offY = offsetY,
+                    commentRow = sourceRow, commentCol = sourceCol, commentId = sourceId
+                )
+            }
+            vm.useAux = link.isAux
+            savedRow = link.row; savedCol = link.col
+            row = link.row; col = link.col
+            subMode = ViewerSubMode.VIEW
+            pendingJump = PendingJump(link.x, link.y, link.scale)
+        }
+
+        // Обработка «изменить привязку»: после возврата из LinkPicker перескакиваем
+        LaunchedEffect(vm.pendingRejump) {
+            val pj = vm.pendingRejump ?: return@LaunchedEffect
+            vm.pendingRejump = null
+            val lr = vm.linkReturn ?: return@LaunchedEffect
+            jumpToLink(pj, lr.commentRow, lr.commentCol, lr.commentId, keepReturn = true)
+        }
+
+        // Применение viewport: либо pendingJump, либо обычная логика
+        LaunchedEffect(row, col, fitW, fitH, pendingJump) {
             val pj = pendingJump
             if (pj != null) {
                 scale = pj.scale
@@ -168,6 +226,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 offsetY = containerH / 2f - pj.y * fitH * pj.scale
                 pendingJump = null
                 savedRow = row; savedCol = col
+                swipeDir = SwipeDir.NONE
                 return@LaunchedEffect
             }
             if (row == savedRow && col == savedCol) return@LaunchedEffect
@@ -186,47 +245,20 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             swipeDir = SwipeDir.NONE
         }
 
-        fun persistViewport() {
-            val c = vm.cell(row, col) ?: return
-            val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
-            val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
-            if (c.ownPosition) {
-                vm.updateCell(row, col) { it.copy(ownScale = scale, ownOffsetX = vOx, ownOffsetY = vOy) }
-            } else {
-                vm.setGlobalViewport(scale, vOx, vOy, row, col)
-            }
-        }
-
-        fun returnFromLink() {
-            val r = linkReturn ?: return
-            vm.useAux = r.isAux
-            savedRow = r.row; savedCol = r.col
-            row = r.row; col = r.col
-            scale = r.scale
-            offsetX = r.offX; offsetY = r.offY
-            linkReturn = null
-        }
-
-        fun jumpToLink(link: com.example.kotlovan.data.PinLink) {
-            linkReturn = LinkReturn(vm.useAux, row, col, scale, offsetX, offsetY)
-            vm.useAux = link.isAux
-            savedRow = link.row; savedCol = link.col
-            row = link.row; col = link.col
-            pendingJump = PendingJump(link.x, link.y, link.scale)
-        }
+        val cornerPx = with(density) { 80.dp.toPx() }
 
         Box(
             Modifier
                 .fillMaxSize()
                 .clipToBounds()
-                .pointerInput(row, col, subMode, fitW, fitH, linkReturn) {
+                .pointerInput(row, col, subMode, fitW, fitH, inLinkMode) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
                         fitW = fitW, fitH = fitH,
                         containerW = containerW, containerH = containerH,
                         onTransform = { vp -> scale = vp.scale; offsetX = vp.offset.x; offsetY = vp.offset.y },
                         onSwipe = { dx, dy ->
-                            if (linkReturn != null) {
+                            if (inLinkMode) {
                                 returnFromLink()
                             } else if (subMode == ViewerSubMode.VIEW) {
                                 val nr: Int; val nc: Int; val dir: SwipeDir
@@ -245,18 +277,25 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         },
                         onTap = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+                            // 1) Угол справа снизу — toggle иконок
+                            val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
+                            if (inCorner) {
+                                iconsHidden = !iconsHidden
+                                return@detectViewerGestures
+                            }
+                            // 2) Пин — ссылка или title
                             val hit = findPinAt(currentCell, pos, fitW, fitH, scale, Offset(offsetX, offsetY))
                             if (hit != null) {
-                                if (hit.link != null) jumpToLink(hit.link)
-                                else {
+                                if (hit.link != null) {
+                                    jumpToLink(hit.link, row, col, hit.id)
+                                } else {
                                     val now = System.currentTimeMillis()
                                     visibleTitles = if (hit.id in visibleTitles && (visibleTitles[hit.id] ?: 0L) > now)
                                         visibleTitles - hit.id
                                     else visibleTitles + (hit.id to now + 5000)
                                 }
-                            } else {
-                                iconsHidden = !iconsHidden
                             }
+                            // 3) Иначе — ничего (по ТЗ иконки скрываются только в углу)
                         },
                         onLongPress = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
@@ -269,7 +308,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 val imgY = (pos.y - offsetY) / scale
                                 val nx = (imgX / fitW).coerceIn(0f, 1f)
                                 val ny = (imgY / fitH).coerceIn(0f, 1f)
-                                val cr = with(density) { 4.dp.toPx() }   // в 3 раза меньше
+                                val cr = with(density) { 4.dp.toPx() }
                                 val rad = (cr / (fitW * scale)).coerceIn(0.0015f, 0.3f)
                                 val id = UUID.randomUUID().toString()
                                 val pin = CommentPin(id = id, x = nx, y = ny, radius = rad, color = 0xFFFF5722L)
@@ -341,7 +380,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 ) {
                     OutlinedIconButton(
                         onClick = {
-                            if (linkReturn != null) {
+                            if (inLinkMode) {
                                 returnFromLink()
                             } else {
                                 persistViewport()
@@ -359,20 +398,21 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         onClick = { flashlight.toggle() },
                         icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
                     )
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedIconButton(
-                        onClick = {
-                            persistViewport()
-                            val goingAux = !vm.useAux
-                            vm.useAux = goingAux
-                            val target = vm.active
-                            savedRow = target.lastRow; savedCol = target.lastCol
-                            row = target.lastRow; col = target.lastCol
-                            pendingJump = null
-                        },
-                        icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
-                        description = "Переключить массив", iconModifier = iconMod
-                    )
+                    if (!inLinkMode) {
+                        Spacer(Modifier.width(4.dp))
+                        OutlinedIconButton(
+                            onClick = {
+                                persistViewport()
+                                vm.useAux = !vm.useAux
+                                val target = vm.active
+                                savedRow = target.lastRow; savedCol = target.lastCol
+                                row = target.lastRow; col = target.lastCol
+                                pendingJump = null
+                            },
+                            icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
+                            description = "Переключить массив", iconModifier = iconMod
+                        )
+                    }
                     Spacer(Modifier.width(4.dp))
                     Box {
                         OutlinedIconButton(
@@ -380,39 +420,50 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
                         )
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
-                                menuOpen = false; subMode = ViewerSubMode.SET_COMMON_POINT
-                            })
-                            DropdownMenuItem(
-                                text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
-                                onClick = {
-                                    menuOpen = false
-                                    val c = currentCell ?: return@DropdownMenuItem
-                                    val newOwn = !c.ownPosition
-                                    val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
-                                    val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
-                                    vm.updateCell(row, col) {
-                                        it.copy(
-                                            ownPosition = newOwn,
-                                            ownScale = if (newOwn) scale else it.ownScale,
-                                            ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
-                                            ownOffsetY = if (newOwn) vOy else it.ownOffsetY
-                                        )
+                            if (inLinkMode) {
+                                val lr = vm.linkReturn!!
+                                DropdownMenuItem(
+                                    text = { Text("Изменить привязку") },
+                                    onClick = {
+                                        menuOpen = false
+                                        nav.navigate("linkpicker/${lr.commentRow}/${lr.commentCol}/${lr.commentId}")
                                     }
-                                }
-                            )
-                            DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
-                                menuOpen = false; subMode = ViewerSubMode.PLACE_COMMENT
-                            })
-                            DropdownMenuItem(text = { Text("Настройки") }, onClick = {
-                                menuOpen = false; showSettings = true
-                            })
+                                )
+                            } else {
+                                DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
+                                    menuOpen = false; subMode = ViewerSubMode.SET_COMMON_POINT
+                                })
+                                DropdownMenuItem(
+                                    text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
+                                    onClick = {
+                                        menuOpen = false
+                                        val c = currentCell ?: return@DropdownMenuItem
+                                        val newOwn = !c.ownPosition
+                                        val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
+                                        val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
+                                        vm.updateCell(row, col) {
+                                            it.copy(
+                                                ownPosition = newOwn,
+                                                ownScale = if (newOwn) scale else it.ownScale,
+                                                ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
+                                                ownOffsetY = if (newOwn) vOy else it.ownOffsetY
+                                            )
+                                        }
+                                    }
+                                )
+                                DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
+                                    menuOpen = false; subMode = ViewerSubMode.PLACE_COMMENT
+                                })
+                                DropdownMenuItem(text = { Text("Настройки") }, onClick = {
+                                    menuOpen = false; showSettings = true
+                                })
+                            }
                         }
                     }
                 }
 
-                // Левая колонка строк
-                if (subMode == ViewerSubMode.VIEW) {
+                // Строки / столбцы / глаз — скрыты в режиме ссылки
+                if (subMode == ViewerSubMode.VIEW && !inLinkMode) {
                     Column(
                         Modifier
                             .align(Alignment.CenterStart)
@@ -449,8 +500,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             )
                         }
                     }
-
-                    // Иконка глаза
                     Box(
                         Modifier.align(Alignment.BottomStart).padding(16.dp).size(48.dp)
                             .clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
@@ -475,7 +524,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
             }
 
-            // Режим общей точки
+            // Режим «Общая точка»
             if (subMode == ViewerSubMode.SET_COMMON_POINT) {
                 BlinkingDot(modifier = Modifier.align(Alignment.Center))
                 OutlinedIconButton(
@@ -497,7 +546,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 )
             }
 
-            // Создание комментария из центра (кнопка из меню)
+            // Режим «Установить комментарий из центра»
             if (subMode == ViewerSubMode.PLACE_COMMENT) {
                 BlinkingDot(modifier = Modifier.align(Alignment.Center))
                 OutlinedIconButton(
@@ -555,7 +604,14 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         )
     }
 
-    DisposableEffect(Unit) { onDispose { vm.autosave(); flashlight.off() } }
+    DisposableEffect(Unit) {
+        onDispose {
+            vm.linkReturn = null
+            vm.pendingRejump = null
+            vm.autosave()
+            flashlight.off()
+        }
+    }
 }
 
 private fun findPinAt(
@@ -630,6 +686,9 @@ private fun CommentPinOverlay(
     val density = LocalDensity.current
     val screenX = pin.x * fitW * scale + offset.x
     val screenY = pin.y * fitH * scale + offset.y
+
+    // Отображаемый диаметр = pin.radius * fitW * scale * 2.
+    // pin.radius хранится как доля от ширины картинки → «приклеен» к изображению.
     val diameterPx: Float = when (eyeMode) {
         EyeMode.SCALING_UP -> {
             val s = scale.coerceIn(0.2f, 5f)

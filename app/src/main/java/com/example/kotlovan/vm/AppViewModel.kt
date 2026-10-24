@@ -1,5 +1,7 @@
 package com.example.kotlovan.vm
 
+import com.example.kotlovan.data.LinkReturnState
+import com.example.kotlovan.data.PinLink
 import com.example.kotlovan.data.PinLink
 import android.app.Application
 import android.net.Uri
@@ -24,8 +26,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     /** Режим: false = main, true = aux. Не сохраняется между сессиями. */
-    var useAux by mutableStateOf(false)
-
+	var useAux by mutableStateOf(false)
+	
+	/** Режим просмотра перехода по ссылке. null — обычный просмотр. */
+	var linkReturn by mutableStateOf<LinkReturnState?>(null)
+	
+	/** Признак «после редактирования привязки нужно перескочить на новую точку». */
+	var pendingRejump by mutableStateOf<PinLink?>(null)
 
     var pendingReconnect by mutableStateOf(emptyList<Pair<Int, Int>>())
         private set

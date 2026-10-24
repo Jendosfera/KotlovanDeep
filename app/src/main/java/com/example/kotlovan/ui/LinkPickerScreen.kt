@@ -153,10 +153,12 @@ fun LinkPickerScreen(
                 val imgY = (containerH / 2f - offset.y) / scale
                 val nx = (imgX / fitW).coerceIn(0f, 1f)
                 val ny = (imgY / fitH).coerceIn(0f, 1f)
-                vm.setCommentLink(
-                    comRow, comCol, commentId,
-                    PinLink(vm.useAux, row, col, nx, ny, scale)
-                )
+                val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
+                vm.setCommentLink(comRow, comCol, commentId, newLink)
+                // Если пришли из режима просмотра ссылки — перескочим на новую привязку
+                if (vm.linkReturn != null) {
+                    vm.pendingRejump = newLink
+                }
                 nav.popBackStack()
             },
             icon = Icons.Default.Check,
