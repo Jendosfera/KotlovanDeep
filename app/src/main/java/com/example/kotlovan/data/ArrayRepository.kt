@@ -48,11 +48,16 @@ class ArrayRepository(private val context: Context) {
         true
     } catch (e: Exception) { Log.e("Kotlovan", "saveToUri", e); false }
 
-    fun loadFromUri(uri: Uri): ArrayConfig? = try {
-        val text = context.contentResolver.openInputStream(uri)
-            ?.bufferedReader()?.use { it.readText() } ?: return null
-        json.decodeFromString(ArrayConfig.serializer(), text)
-    } catch (e: Exception) { Log.e("Kotlovan", "loadFromUri", e); null }
+	fun loadFromUri(uri: Uri): ArrayConfig? {
+		return try {
+			val text = context.contentResolver.openInputStream(uri)
+				?.bufferedReader()?.use { it.readText() } ?: return null
+			json.decodeFromString(ArrayConfig.serializer(), text)
+		} catch (e: Exception) {
+			Log.e("Kotlovan", "loadFromUri", e)
+			null
+		}
+	}
 
     fun autosave(config: ArrayConfig) {
         prefs.edit().putString("autosave", json.encodeToString(ArrayConfig.serializer(), config)).apply()

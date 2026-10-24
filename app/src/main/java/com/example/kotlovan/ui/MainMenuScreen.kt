@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,7 +50,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                     reconnectIdx = 0
                     showReconnectDialog = true
                 } else {
-                    nav.navigate("builder")
+                    nav.navigate("builder?aux=false")
                 }
             } else {
                 Toast.makeText(ctx, "Не удалось прочитать файл", Toast.LENGTH_SHORT).show()
@@ -70,12 +69,13 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
     }
 
     LaunchedEffect(showReconnectDialog, reconnectIdx, vm.pendingReconnect.size) {
-        if (showReconnectDialog && reconnectIdx >= vm.pendingReconnect.size &&
+        if (showReconnectDialog &&
+            reconnectIdx >= vm.pendingReconnect.size &&
             vm.pendingReconnect.isNotEmpty()) {
             showReconnectDialog = false
             reconnectIdx = 0
             vm.clearPendingReconnect()
-            nav.navigate("builder")
+            nav.navigate("builder?aux=false")
         }
     }
 
@@ -84,7 +84,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (vm.config.cells.isNotEmpty()) {
+        if (vm.config.main.cells.isNotEmpty() || vm.config.aux.cells.isNotEmpty()) {
             Button(
                 onClick = {
                     vm.autosave()
@@ -95,7 +95,10 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             Spacer(Modifier.height(16.dp))
         }
         Button(
-            onClick = { vm.newArray(); nav.navigate("builder") },
+            onClick = {
+                vm.newArray()
+                nav.navigate("builder?aux=false")
+            },
             modifier = Modifier.fillMaxWidth().height(64.dp)
         ) { Text("Создать массив", fontSize = 20.sp) }
         Spacer(Modifier.height(16.dp))
@@ -128,7 +131,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                     showReconnectDialog = false
                     reconnectIdx = 0
                     vm.clearPendingReconnect()
-                    nav.navigate("builder")
+                    nav.navigate("builder?aux=false")
                 }) { Text("Пропустить") }
             }
         )
