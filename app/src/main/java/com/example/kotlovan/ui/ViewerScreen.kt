@@ -86,7 +86,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var row by remember { mutableStateOf(cfg.lastRow) }
     var col by remember { mutableStateOf(cfg.lastCol) }
     var scale by remember { mutableStateOf(cfg.globalScale) }
-    var offset by remember { mutableStateOf(Offset(cfg.globalOffsetX, cfg.globalOffsetY)) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
     var menuOpen by remember { mutableStateOf(false) }
     var eyeMode by remember { mutableStateOf(EyeMode.HIDDEN) }
     var subMode by remember { mutableStateOf(ViewerSubMode.VIEW) }
@@ -107,28 +107,36 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
-        // Иконки с настройкой размера/прозрачности
         val baseIconDp = 28.dp * cfg.iconSize
         val iconMod = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
 
-        // Подстановка viewport
+        // Подстановка viewport из общей точки текущей ячейки
         LaunchedEffect(row, col, fitW, fitH) {
-            val c = vm.cell(row, col)
-            if (c != null) {
-                if (c.ownPosition) {
-                    scale = c.ownScale
-                    offset = Offset(c.ownOffsetX, c.ownOffsetY)
-                } else {
-                    scale = vm.config.globalScale
-                    val gOx = vm.config.globalOffsetX
-                    val gOy = vm.config.globalOffsetY
-                    offset = if (gOx == 0f && gOy == 0f && vm.config.globalScale == 1f)
-                        Offset((containerW - fitW) / 2f, (containerH - fitH) / 2f)
-                    else Offset(gOx, gOy)
-                }
-                offset = clampOffset(offset, scale, fitW, fitH, containerW, containerH)
+            val c = vm.cell(row, col) ?: return@LaunchedEffect
+            val (s, vOx, vOy) = if (c.ownPosition) {
+                Triple(c.ownScale, c.ownOffsetX, c.ownOffsetY)
+            } else {
+                Triple(vm.config.globalScale, vm.config.globalOffsetX, vm.config.globalOffsetY)
             }
+            scale = s
+            offset = Offset(
+                containerW / 2f + vOx - c.commonX * fitW * s,
+                containerH / 2f + vOy - c.commonY * fitH * s
+            )
+            offset = clampOffset(offset, scale, fitW, fitH, containerW, containerH)
             swipeDir = SwipeDir.NONE
+        }
+
+        // Вспомогательные функции для сохранения viewportOffset ячейки
+        fun persistViewport() {
+            val c = vm.cell(row, col) ?: return
+            val vOx = offset.x - containerW / 2f + c.commonX * fitW * scale
+            val vOy = offset.y - containerH / 2f + c.commonY * fitH * scale
+            if (c.ownPosition) {
+                vm.updateCell(row, col) { it.copy(ownScale = scale, ownOffsetX = vOx, ownOffsetY = vOy) }
+            } else {
+                vm.setGlobalViewport(scale, vOx, vOy, row, col)
+            }
         }
 
         Box(
@@ -152,13 +160,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                     else         { nr = row - 1; nc = col; dir = SwipeDir.DOWN }
                                 }
                                 if (vm.cell(nr, nc) != null) {
-                                    val c = vm.cell(row, col)
-                                    if (c != null) {
-                                        if (c.ownPosition) vm.updateCell(row, col) {
-                                            it.copy(ownScale = scale, ownOffsetX = offset.x, ownOffsetY = offset.y)
-                                        }
-                                        else vm.setGlobalViewport(scale, offset.x, offset.y, row, col)
-                                    }
+                                    persistViewport()
                                     swipeDir = dir; row = nr; col = nc
                                 }
                             }
@@ -166,7 +168,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     )
                 }
         ) {
-            // Изображение
             AnimatedContent(
                 targetState = "$row,$col",
                 transitionSpec = {
@@ -212,56 +213,39 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
             }
 
-            // Кружки комментариев
             if (currentCell != null) {
                 for (pin in currentCell.comments) {
                     CommentPinOverlay(
-                        pin = pin,
-                        scale = scale,
-                        offset = offset,
-                        eyeMode = eyeMode,
-                        cell = currentCell,
-                        fitW = fitW,
-                        fitH = fitH,
+                        pin = pin, scale = scale, offset = offset,
+                        eyeMode = eyeMode, cell = currentCell,
+                        fitW = fitW, fitH = fitH,
                         onOpen = { nav.navigate("comment/$row/$col/${pin.id}") }
                     )
                 }
             }
 
-            // Верхняя панель (контрастные иконки)
             Row(
                 Modifier.fillMaxWidth().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedIconButton(onClick = {
-                    val c = vm.cell(row, col)
-                    if (c != null) {
-                        if (c.ownPosition) vm.updateCell(row, col) {
-                            it.copy(ownScale = scale, ownOffsetX = offset.x, ownOffsetY = offset.y)
-                        }
-                        else vm.setGlobalViewport(scale, offset.x, offset.y, row, col)
-                    }
-                    vm.autosave()
-                    nav.popBackStack()
-                }, icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod)
-
+                OutlinedIconButton(
+                    onClick = {
+                        persistViewport()
+                        vm.autosave()
+                        nav.popBackStack()
+                    },
+                    icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
+                )
                 Spacer(Modifier.weight(1f))
-
                 OutlinedIconButton(
                     onClick = { flashlight.toggle() },
-                    icon = Icons.Default.FlashOn,
-                    description = "Фонарик",
-                    iconModifier = iconMod
+                    icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
                 )
-
                 Spacer(Modifier.weight(1f))
-
                 Box {
                     OutlinedIconButton(
                         onClick = { menuOpen = !menuOpen },
-                        icon = Icons.Default.MoreVert,
-                        description = "Меню",
-                        iconModifier = iconMod
+                        icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
                     )
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
@@ -273,12 +257,14 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 menuOpen = false
                                 val c = currentCell ?: return@DropdownMenuItem
                                 val newOwn = !c.ownPosition
+                                val vOx = offset.x - containerW / 2f + c.commonX * fitW * scale
+                                val vOy = offset.y - containerH / 2f + c.commonY * fitH * scale
                                 vm.updateCell(row, col) {
                                     it.copy(
                                         ownPosition = newOwn,
                                         ownScale = if (newOwn) scale else it.ownScale,
-                                        ownOffsetX = if (newOwn) offset.x else it.ownOffsetX,
-                                        ownOffsetY = if (newOwn) offset.y else it.ownOffsetY
+                                        ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
+                                        ownOffsetY = if (newOwn) vOy else it.ownOffsetY
                                     )
                                 }
                             }
@@ -293,7 +279,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
             }
 
-            // Иконка глаза (двойное касание — переключение режима)
             if (subMode == ViewerSubMode.VIEW) {
                 Box(
                     Modifier
@@ -323,56 +308,59 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
             }
 
-            // Режим установки «Общей точки»
+            // Установка «Общей точки» — индивидуально для текущей ячейки
             if (subMode == ViewerSubMode.SET_COMMON_POINT) {
                 BlinkingDot(modifier = Modifier.align(Alignment.Center))
                 OutlinedIconButton(
                     onClick = {
-                        vm.updateCell(row, col) { it.copy(commonX = 0.5f, commonY = 0.5f) }
+                        val imgX = (containerW / 2f - offset.x) / scale
+                        val imgY = (containerH / 2f - offset.y) / scale
+                        val nx = (imgX / fitW).coerceIn(0f, 1f)
+                        val ny = (imgY / fitH).coerceIn(0f, 1f)
+                        vm.updateCell(row, col) {
+                            it.copy(commonX = nx, commonY = ny)
+                        }
+                        // viewportOffset = 0, т.к. общая точка теперь в центре
+                        if (currentCell?.ownPosition == true) {
+                            vm.updateCell(row, col) { it.copy(ownOffsetX = 0f, ownOffsetY = 0f) }
+                        } else {
+                            vm.setGlobalViewport(scale, 0f, 0f, row, col)
+                        }
+                        offset = Offset(
+                            containerW / 2f - nx * fitW * scale,
+                            containerH / 2f - ny * fitH * scale
+                        )
                         subMode = ViewerSubMode.VIEW
                     },
-                    icon = Icons.Default.Check,
-                    description = "Подтвердить",
-                    iconModifier = iconMod,
+                    icon = Icons.Default.Check, description = "Подтвердить", iconModifier = iconMod,
                     modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
                 )
             }
 
-            // Создание комментария
             if (subMode == ViewerSubMode.PLACE_COMMENT) {
                 BlinkingDot(modifier = Modifier.align(Alignment.Center))
                 OutlinedIconButton(
                     onClick = {
                         val cell = vm.cell(row, col)
                         if (cell != null) {
-                            // Точка картинки под центром экрана
-                            val centerX = containerW / 2f
-                            val centerY = containerH / 2f
-                            val imgX = (centerX - offset.x) / scale
-                            val imgY = (centerY - offset.y) / scale
+                            val imgX = (containerW / 2f - offset.x) / scale
+                            val imgY = (containerH / 2f - offset.y) / scale
                             val nx = (imgX / fitW).coerceIn(0f, 1f)
                             val ny = (imgY / fitH).coerceIn(0f, 1f)
-
-                            // Радиус такой, чтобы на экране кружок был как прицел (24.dp диаметр)
                             val crosshairRadiusPx = with(density) { 12.dp.toPx() }
                             val r = crosshairRadiusPx / (fitW * scale)
-
                             val id = UUID.randomUUID().toString()
                             val newPin = CommentPin(
                                 id = id, x = nx, y = ny,
                                 radius = r.coerceIn(0.005f, 0.3f),
-                                title = "", text = "",
-                                color = 0xFFFF5722L,
-                                iconType = com.example.kotlovan.data.CommentIconType.CIRCLE
+                                color = 0xFFFF5722L
                             )
                             vm.setComments(row, col, cell.comments + newPin)
                             subMode = ViewerSubMode.VIEW
                             nav.navigate("comment/$row/$col/$id")
                         }
                     },
-                    icon = Icons.Default.Check,
-                    description = "Подтвердить",
-                    iconModifier = iconMod,
+                    icon = Icons.Default.Check, description = "Подтвердить", iconModifier = iconMod,
                     modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
                 )
             }
@@ -394,8 +382,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     }
 }
 
-// ─────────── Хелпер: иконка с контрастным фоном ───────────
-
 @Composable
 private fun OutlinedIconButton(
     onClick: () -> Unit,
@@ -405,18 +391,10 @@ private fun OutlinedIconButton(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(onClick = onClick),
+        modifier = modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)).clickable(onClick = onClick),
         contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, description, tint = Color.White, modifier = iconModifier)
-    }
+    ) { Icon(icon, description, tint = Color.White, modifier = iconModifier) }
 }
-
-// ─────────── Прицел ───────────
 
 @Composable
 private fun BlinkingDot(modifier: Modifier = Modifier) {
@@ -427,28 +405,18 @@ private fun BlinkingDot(modifier: Modifier = Modifier) {
     Box(modifier.size(24.dp).alpha(a).clip(CircleShape).background(Color.Red))
 }
 
-// ─────────── Кружок комментария ───────────
-
 @Composable
 private fun CommentPinOverlay(
-    pin: CommentPin,
-    scale: Float,
-    offset: Offset,
-    eyeMode: EyeMode,
-    cell: CellData,
-    fitW: Float,
-    fitH: Float,
+    pin: CommentPin, scale: Float, offset: Offset,
+    eyeMode: EyeMode, cell: CellData, fitW: Float, fitH: Float,
     onOpen: () -> Unit
 ) {
     if (cell.imageWidth <= 0 || cell.imageHeight <= 0) return
     val density = LocalDensity.current
-
     val pxImg = pin.x * fitW
     val pyImg = pin.y * fitH
     val screenX = pxImg * scale + offset.x
     val screenY = pyImg * scale + offset.y
-
-    // Размер иконки в зависимости от режима глаза
     val diameterPx: Float = when (eyeMode) {
         EyeMode.SCALING_UP -> {
             val s = scale.coerceIn(0.2f, 5f)
@@ -457,8 +425,6 @@ private fun CommentPinOverlay(
         }
         else -> pin.radius * fitW * scale * 2f
     }
-
-    // Мерцание разными цветами
     var blinkPhase by remember { mutableStateOf(0) }
     var blinkIndex by remember { mutableStateOf((0..4).random()) }
     LaunchedEffect(eyeMode) {
@@ -470,7 +436,6 @@ private fun CommentPinOverlay(
             }
         }
     }
-
     val displayColor: Color = when (eyeMode) {
         EyeMode.BLINKING -> BlinkColors[blinkIndex]
         else -> Color(pin.color.toInt())
@@ -479,33 +444,18 @@ private fun CommentPinOverlay(
         EyeMode.BLINKING -> if (blinkPhase == 1) 0.3f else 1f
         else -> 1f
     }
-
-    // Видимость названия: по тапу или в режиме SHOW_TITLES
     var titleVisible by remember { mutableStateOf(false) }
     var titleTimeout by remember { mutableStateOf(0L) }
     LaunchedEffect(titleTimeout) {
-        if (titleTimeout > 0) {
-            delay(5000)
-            titleVisible = false
-            titleTimeout = 0L
-        }
+        if (titleTimeout > 0) { delay(5000); titleVisible = false; titleTimeout = 0L }
     }
     val showTitle = titleVisible || eyeMode == EyeMode.SHOW_TITLES
-
     val diameterDp = with(density) { diameterPx.toDp() }
-
-    // Иконка
     CommentIconShape(
-        type = pin.iconType,
-        color = displayColor,
-        sizeDp = diameterDp,
-        alpha = displayAlpha,
+        type = pin.iconType, color = displayColor, sizeDp = diameterDp, alpha = displayAlpha,
         modifier = Modifier
             .offset {
-                IntOffset(
-                    (screenX - diameterPx / 2f).toInt(),
-                    (screenY - diameterPx / 2f).toInt()
-                )
+                IntOffset((screenX - diameterPx / 2f).toInt(), (screenY - diameterPx / 2f).toInt())
             }
             .pointerInput(pin.id) {
                 detectTapGestures(
@@ -518,15 +468,11 @@ private fun CommentPinOverlay(
                 )
             }
     )
-
-    // Название над иконкой
     if (showTitle && pin.title.isNotBlank()) {
         val titleFontPx = (diameterPx * 0.35f).coerceAtLeast(with(density) { 10.dp.toPx() })
         Text(
-            text = pin.title,
-            color = Color.White,
-            fontSize = with(density) { titleFontPx.toSp() },
-            maxLines = 1,
+            text = pin.title, color = Color.White,
+            fontSize = with(density) { titleFontPx.toSp() }, maxLines = 1,
             modifier = Modifier
                 .offset {
                     IntOffset(

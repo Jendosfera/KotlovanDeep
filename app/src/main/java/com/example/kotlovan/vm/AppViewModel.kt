@@ -21,6 +21,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hasUnsavedChanges by mutableStateOf(false)
         private set
 
+    /** Ячейки, у которых после загрузки JSON нет persistable-права на URI. */
+    var pendingReconnect: List<Pair<Int, Int>> by mutableStateOf(emptyList())
+        private set
+
     init {
         val loaded = repo.loadAutosave()
         if (loaded != null) config = normalize(loaded)
@@ -31,12 +35,39 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    /** Единственная точка загрузки JSON из SAF. */
     fun load(uri: Uri): Boolean {
         val c = repo.loadFromUri(uri) ?: return false
         config = normalize(c)
+
+        // Ищем ячейки, у которых нет persistable-прав (после переустановки)
+        val missing = mutableListOf<Pair<Int, Int>>()
+        config.cells.forEach { (key, cell) ->
+            val u = cell.imageUri ?: return@forEach
+            if (!repo.hasPersistablePermission(Uri.parse(u))) {
+                val parts = key.split(",")
+                val r = parts.getOrNull(0)?.toIntOrNull() ?: return@forEach
+                val cc = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach
+                missing += r to cc
+            }
+        }
+        pendingReconnect = missing
         hasUnsavedChanges = false
         return true
+    }
+
+    fun clearPendingReconnect() { pendingReconnect = emptyList() }
+
+    /** Восстанавливает доступ к изображению для конкретной ячейки (переустановка). */
+    fun reconnectImage(r: Int, c: Int, uri: Uri) {
+        repo.takePersistablePermission(uri)
+        val sz = repo.getImageSize(uri)
+        updateCell(r, c) {
+            it.copy(
+                imageUri = uri.toString(),
+                imageWidth = sz?.first ?: it.imageWidth,
+                imageHeight = sz?.second ?: it.imageHeight
+            )
+        }
     }
 
     fun save(uri: Uri): Boolean {
@@ -73,11 +104,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    fun setGlobalViewport(scale: Float, ox: Float, oy: Float, r: Int, c: Int) {
+    /** viewportOffset — смещение общей точки от центра экрана (px). */
+    fun setGlobalViewport(scale: Float, vOx: Float, vOy: Float, r: Int, c: Int) {
         config = config.copy(
             globalScale = scale,
-            globalOffsetX = ox,
-            globalOffsetY = oy,
+            globalOffsetX = vOx,
+            globalOffsetY = vOy,
             lastRow = r,
             lastCol = c
         )
@@ -97,11 +129,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    /** Восстанавливает persistable-права и размеры картинок по URI. */
     private fun normalize(src: ArrayConfig): ArrayConfig {
         val fixed = src.cells.mapValues { (_, cell) ->
-            val u = cell.imageUri
-            if (u == null) return@mapValues cell
+            val u = cell.imageUri ?: return@mapValues cell
             val parsed = Uri.parse(u)
             repo.takePersistablePermission(parsed)
             if (cell.imageWidth == 0) {

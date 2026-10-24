@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.platform.LocalDensity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -108,43 +109,24 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
                     }
                 }
         ) {
+            val density = LocalDensity.current
+            val cellSizeDp = CELL_SIZE.dp
+            val cellGapDp = CELL_GAP.dp
+            val cellSizePx = with(density) { cellSizeDp.toPx() }
+            val cellGapPx = with(density) { cellGapDp.toPx() }
+            
             for (r in rFrom..rTo) for (c in cFrom..cTo) {
                 val data = vm.cell(r, c)
-                val x = (c - cFrom) * (CELL_SIZE + CELL_GAP)
-                val y = (r - rFrom) * (CELL_SIZE + CELL_GAP)
+                val xPx = (c - cFrom) * (cellSizePx + cellGapPx)
+                val yPx = (r - rFrom) * (cellSizePx + cellGapPx)
                 val isPlus = data == null && hasNeighbor(r, c, cells)
                 val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
-
+            
                 Box(
                     Modifier
-                        .graphicsLayer { translationX = x; translationY = y }
-                        .size(CELL_SIZE.dp)
-                ) {
-                    when {
-                        data != null -> CreatedCell(
-                            data = data,
-                            vm = vm,
-                            isSwapTarget = longPressMode && selectedForSwap != null &&
-                                    (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
-                            onClick = {
-                                if (longPressMode) {
-                                    if (selectedForSwap == null) selectedForSwap = r to c
-                                    else {
-                                        vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-                                        selectedForSwap = null; longPressMode = false
-                                    }
-                                }
-                            },
-                            onDoubleTap = { nav.navigate("card/$r/$c") },
-                            onLongPress = {
-                                longPressMode = true
-                                selectedForSwap = r to c
-                                Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                        isPlus || isEmptyStart -> PlusButton { nav.navigate("card/$r/$c") }
-                    }
-                }
+                        .graphicsLayer { translationX = xPx; translationY = yPx }
+                        .size(cellSizeDp)
+                ) { … }
             }
         }
 
