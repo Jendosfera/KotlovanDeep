@@ -1,5 +1,6 @@
 package com.example.kotlovan.vm
 
+import com.example.kotlovan.data.PinLink
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -38,6 +39,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (loaded != null) config = normalize(loaded)
     }
 
+	fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?) {
+		updateCell(r, c) { cell ->
+			cell.copy(comments = cell.comments.map {
+				if (it.id == id) it.copy(link = link) else it
+			})
+		}
+	}
 
     fun newArray() {
         config = ArrayConfig()

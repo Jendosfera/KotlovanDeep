@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.material.icons.filled.Link
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -105,6 +106,14 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Назад") }
             Text("Комментарий", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { nav.navigate("linkpicker/$row/$col/$id") }) {
+                Icon(
+                    Icons.Default.Link,
+                    contentDescription = "Ссылка на другую ячейку",
+                    tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(

@@ -51,6 +51,14 @@ fun RootNav() {
             val col = back.arguments?.getString("col")?.toInt() ?: 0
             val id = back.arguments?.getString("id") ?: ""
             CommentEditorScreen(nav, vm, row, col, id)
+			
+			
         }
+		composable("linkpicker/{row}/{col}/{id}") { back ->
+		    val row = back.arguments?.getString("row")?.toInt() ?: 0
+		    val col = back.arguments?.getString("col")?.toInt() ?: 0
+		    val id = back.arguments?.getString("id") ?: ""
+		    LinkPickerScreen(nav, vm, row, col, id)
+		}
     }
 }

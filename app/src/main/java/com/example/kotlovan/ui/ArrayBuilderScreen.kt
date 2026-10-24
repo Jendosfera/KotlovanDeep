@@ -1,5 +1,8 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,6 +77,8 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var initialized by remember(aux) { mutableStateOf(false) }
+	var showNameDialog by remember { mutableStateOf(false) }
+	var fileName by remember { mutableStateOf("array.json") }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
@@ -227,7 +232,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
-                    onClick = { saveLauncher.launch("array.json") },
+                    onClick = { showNameDialog = true },
                     modifier = Modifier.weight(1f).height(56.dp)
                 ) { Text("Сохранить массив") }
                 Button(
@@ -245,6 +250,30 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     }
 
     DisposableEffect(Unit) { onDispose { vm.autosave() } }
+if (showNameDialog) {
+    AlertDialog(
+        onDismissRequest = { showNameDialog = false },
+        title = { Text("Название сохранения") },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text("Имя файла") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                showNameDialog = false
+                val name = if (fileName.contains('.')) fileName else "$fileName.json"
+                saveLauncher.launch(name)
+            }) { Text("Сохранить") }
+        },
+        dismissButton = {
+            TextButton(onClick = { showNameDialog = false }) { Text("Отмена") }
+        }
+    )
+}
 }
 
 private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
