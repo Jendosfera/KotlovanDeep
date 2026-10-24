@@ -2,7 +2,6 @@ package com.example.kotlovan.vm
 
 import com.example.kotlovan.data.LinkReturnState
 import com.example.kotlovan.data.PinLink
-import com.example.kotlovan.data.PinLink
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
