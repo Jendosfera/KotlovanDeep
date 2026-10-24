@@ -2,10 +2,18 @@ package com.example.kotlovan.data
 
 import kotlinx.serialization.Serializable
 
-
-
 @Serializable
 enum class CommentIconType { CIRCLE, SQUARE, TRIANGLE, DIAMOND, ROSETTE, PHONE, COMPUTER }
+
+@Serializable
+data class PinLink(
+    val isAux: Boolean,
+    val row: Int,
+    val col: Int,
+    val x: Float,
+    val y: Float,
+    val scale: Float
+)
 
 @Serializable
 data class CommentPin(
@@ -16,8 +24,8 @@ data class CommentPin(
     val title: String = "",
     val text: String = "",
     val color: Long = 0xFFFF5722L,
-    val iconType: CommentIconType = CommentIconType.CIRCLE
-	val link: PinLink? = null
+    val iconType: CommentIconType = CommentIconType.CIRCLE,
+    val link: PinLink? = null
 )
 
 @Serializable
