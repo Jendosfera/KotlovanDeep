@@ -67,7 +67,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     val density = LocalDensity.current
 
     // Синхронизируем режим VM с параметром навигации
-    LaunchedEffect(aux) { vm.setUseAux(aux) }
+    LaunchedEffect(aux) { vm.useAux = aux }
 
     var scale by remember(aux) { mutableStateOf(1f) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }

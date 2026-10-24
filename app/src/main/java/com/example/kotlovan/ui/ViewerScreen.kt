@@ -269,7 +269,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     onClick = {
                         persistViewport()
                         val goingAux = !vm.useAux
-                        vm.setUseAux(goingAux)
+                        vm.useAux = goingAux
                         val target = vm.active
                         if (target.cells.isNotEmpty()) {
                             row = target.lastRow

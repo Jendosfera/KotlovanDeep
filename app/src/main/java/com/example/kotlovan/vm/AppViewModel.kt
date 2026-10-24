@@ -24,7 +24,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Режим: false = main, true = aux. Не сохраняется между сессиями. */
     var useAux by mutableStateOf(false)
-        private set
+
 
     var pendingReconnect by mutableStateOf(emptyList<Pair<Int, Int>>())
         private set
@@ -38,7 +38,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (loaded != null) config = normalize(loaded)
     }
 
-    fun setUseAux(value: Boolean) { useAux = value }
 
     fun newArray() {
         config = ArrayConfig()
