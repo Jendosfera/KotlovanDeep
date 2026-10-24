@@ -232,7 +232,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     onClick = {
                         persistViewport()
                         vm.autosave()
-                        nav.popBackStack()
+                        // Возврат на экран редактирования массива, а не в главное меню
+                        if (!nav.popBackStack("builder", false)) {
+                            nav.navigate("builder") { popUpTo("menu") }
+                        }
                     },
                     icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
                 )

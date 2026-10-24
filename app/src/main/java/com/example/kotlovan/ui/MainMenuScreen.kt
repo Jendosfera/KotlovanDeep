@@ -59,7 +59,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Лямбда НЕ ссылается на reconnectLauncher — обошли self-reference
     val reconnectLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -68,12 +67,11 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             if (item != null) vm.reconnectImage(item.first, item.second, uri)
         }
         reconnectIdx++
-        // Если всё обработано — LaunchedEffect ниже закроет диалог и перейдёт в builder
     }
 
-    // Когда все ячейки пройдены — закрываем диалог и идём в builder
     LaunchedEffect(showReconnectDialog, reconnectIdx, vm.pendingReconnect.size) {
-        if (showReconnectDialog && reconnectIdx >= vm.pendingReconnect.size && vm.pendingReconnect.isNotEmpty()) {
+        if (showReconnectDialog && reconnectIdx >= vm.pendingReconnect.size &&
+            vm.pendingReconnect.isNotEmpty()) {
             showReconnectDialog = false
             reconnectIdx = 0
             vm.clearPendingReconnect()
@@ -86,8 +84,16 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Котлован", style = MaterialTheme.typography.displaySmall)
-        Spacer(Modifier.height(48.dp))
+        if (vm.config.cells.isNotEmpty()) {
+            Button(
+                onClick = {
+                    vm.autosave()
+                    nav.navigate("viewer")
+                },
+                modifier = Modifier.fillMaxWidth().height(64.dp)
+            ) { Text("Продолжить", fontSize = 20.sp) }
+            Spacer(Modifier.height(16.dp))
+        }
         Button(
             onClick = { vm.newArray(); nav.navigate("builder") },
             modifier = Modifier.fillMaxWidth().height(64.dp)

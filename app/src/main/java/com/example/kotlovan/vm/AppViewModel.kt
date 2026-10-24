@@ -34,6 +34,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         config = ArrayConfig()
         hasUnsavedChanges = true
     }
+	
+	fun updateLastCell(r: Int, c: Int) {
+		config = config.copy(lastRow = r, lastCol = c)
+		hasUnsavedChanges = true
+	}
 
     fun load(uri: Uri): Boolean {
         val c = repo.loadFromUri(uri) ?: return false

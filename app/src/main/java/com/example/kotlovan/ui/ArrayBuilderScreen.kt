@@ -4,10 +4,12 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,9 +28,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -47,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
+import com.example.kotlovan.util.Viewport
+import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
 
 private const val CELL_SIZE = 160f
@@ -60,6 +67,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
     var offset by remember { mutableStateOf(Offset.Zero) }
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var initialized by remember { mutableStateOf(false) }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -72,87 +80,124 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             } catch (_: Exception) {}
             if (vm.save(uri)) {
                 Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-                nav.navigate("viewer") { popUpTo("builder") { inclusive = true } }
             } else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
         }
     }
 
-    val cells = vm.config.cells
-    val bounds = remember(cells) {
-        if (cells.isEmpty()) intArrayOf(0, 0, 0, 0)
-        else {
-            val rows = cells.keys.map { it.substringBefore(',').toInt() }
-            val cols = cells.keys.map { it.substringAfter(',').toInt() }
-            intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFFECEFF1))) {
+        val containerW = constraints.maxWidth.toFloat()
+        val containerH = constraints.maxHeight.toFloat()
+
+        val cells = vm.config.cells
+        val bounds = remember(cells) {
+            if (cells.isEmpty()) intArrayOf(0, 0, 0, 0)
+            else {
+                val rows = cells.keys.map { it.substringBefore(',').toInt() }
+                val cols = cells.keys.map { it.substringAfter(',').toInt() }
+                intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
+            }
         }
-    }
-    val minR = bounds[0]; val maxR = bounds[1]
-    val minC = bounds[2]; val maxC = bounds[3]
-    val rFrom = minR - 1; val rTo = maxR + 1
-    val cFrom = minC - 1; val cTo = maxC + 1
+        val minR = bounds[0]; val maxR = bounds[1]
+        val minC = bounds[2]; val maxC = bounds[3]
+        val rFrom = minR - 1; val rTo = maxR + 1
+        val cFrom = minC - 1; val cTo = maxC + 1
 
-    val cellSizeDp = CELL_SIZE.dp
-    val cellGapDp = CELL_GAP.dp
-    val cellSizePx = with(density) { cellSizeDp.toPx() }
-    val cellGapPx = with(density) { cellGapDp.toPx() }
+        val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
+        val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
+        val step = cellSizePx + cellGapPx
+        val colsCount = cTo - cFrom + 1
+        val rowsCount = rTo - rFrom + 1
+        val totalW = colsCount * step - cellGapPx
+        val totalH = rowsCount * step - cellGapPx
 
-    Box(Modifier.fillMaxSize().background(Color(0xFFECEFF1))) {
+        // Центрирование на первой (или последней) ячейке при первом показе
+        LaunchedEffect(Unit) {
+            if (!initialized) {
+                val targetRow = vm.config.lastRow
+                val targetCol = vm.config.lastCol
+                val cxContent = (targetCol - cFrom) * step + cellSizePx / 2f
+                val cyContent = (targetRow - rFrom) * step + cellSizePx / 2f
+                offset = Offset(containerW / 2f - cxContent, containerH / 2f - cyContent)
+                initialized = true
+            }
+        }
 
+        // Жесты ловятся на всей неподвижной области
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    translationX = offset.x
-                    translationY = offset.y
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(0.3f, 3f)
-                        offset += pan
-                    }
+                .pointerInput(totalW, totalH, containerW, containerH) {
+                    detectViewerGestures(
+                        getViewport = { Viewport(scale, offset) },
+                        fitW = totalW,
+                        fitH = totalH,
+                        containerW = containerW,
+                        containerH = containerH,
+                        onTransform = { vp -> scale = vp.scale; offset = vp.offset },
+                        onSwipe = { _, _ -> },
+                        minScale = 0.2f,
+                        maxScale = 5f
+                    )
                 }
         ) {
-            for (r in rFrom..rTo) for (c in cFrom..cTo) {
-                val data = vm.cell(r, c)
-                val xPx = (c - cFrom) * (cellSizePx + cellGapPx)
-                val yPx = (r - rFrom) * (cellSizePx + cellGapPx)
-                val isPlus = data == null && hasNeighbor(r, c, cells)
-                val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
+            // Внутренний контейнер с масштабом/смещением
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        translationX = offset.x
+                        translationY = offset.y
+                        scaleX = scale
+                        scaleY = scale
+                    }
+            ) {
+                for (r in rFrom..rTo) for (c in cFrom..cTo) {
+                    val data = vm.cell(r, c)
+                    val xPx = (c - cFrom) * step
+                    val yPx = (r - rFrom) * step
+                    val isPlus = data == null && hasNeighbor(r, c, cells)
+                    val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
+                    val isSelected = data != null &&
+                            vm.config.lastRow == r && vm.config.lastCol == c
 
-                Box(
-                    Modifier
-                        .graphicsLayer { translationX = xPx; translationY = yPx }
-                        .size(cellSizeDp)
-                ) {
-                    when {
-                        data != null -> CreatedCell(
-                            data = data,
-                            isSwapTarget = longPressMode && selectedForSwap != null &&
-                                    (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
-                            onClick = {
-                                if (longPressMode) {
-                                    if (selectedForSwap == null) selectedForSwap = r to c
-                                    else {
-                                        vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-                                        selectedForSwap = null; longPressMode = false
+                    Box(
+                        Modifier
+                            .graphicsLayer { translationX = xPx; translationY = yPx }
+                            .size(CELL_SIZE.dp)
+                    ) {
+                        when {
+                            data != null -> CreatedCell(
+                                data = data,
+                                isSelected = isSelected,
+                                isSwapTarget = longPressMode && selectedForSwap != null &&
+                                        (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
+                                onClick = {
+                                    if (longPressMode) {
+                                        if (selectedForSwap == null) selectedForSwap = r to c
+                                        else {
+                                            vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
+                                            selectedForSwap = null; longPressMode = false
+                                        }
+                                    } else {
+                                        vm.updateLastCell(r, c)
                                     }
+                                },
+                                onDoubleTap = { nav.navigate("card/$r/$c") },
+                                onLongPress = {
+                                    longPressMode = true
+                                    selectedForSwap = r to c
+                                    Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                                 }
-                            },
-                            onDoubleTap = { nav.navigate("card/$r/$c") },
-                            onLongPress = {
-                                longPressMode = true
-                                selectedForSwap = r to c
-                                Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                        isPlus || isEmptyStart -> PlusButton { nav.navigate("card/$r/$c") }
+                            )
+                            isPlus || isEmptyStart -> PlusButton { nav.navigate("card/$r/$c") }
+                        }
                     }
                 }
             }
         }
 
+        // Верхняя панель
         Row(
             Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -164,6 +209,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
             Spacer(Modifier.weight(1f))
         }
 
+        // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
                 Button(
@@ -171,10 +217,22 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel) {
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 ) { Text("Отменить перенос") }
             }
-            Button(
-                onClick = { saveLauncher.launch("array.json") },
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) { Text("Сохранить массив") }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(
+                    onClick = { saveLauncher.launch("array.json") },
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) { Text("Сохранить массив") }
+                Button(
+                    onClick = {
+                        if (vm.config.cells.isNotEmpty()) {
+                            vm.autosave()
+                            nav.navigate("viewer")
+                        }
+                    },
+                    enabled = vm.config.cells.isNotEmpty(),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) { Text("Просмотр") }
+            }
         }
     }
 
@@ -190,17 +248,30 @@ private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
 
 @Composable
 private fun CreatedCell(
-    data: CellData, isSwapTarget: Boolean,
-    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
+    data: CellData,
+    isSelected: Boolean,
+    isSwapTarget: Boolean,
+    onClick: () -> Unit,
+    onDoubleTap: () -> Unit,
+    onLongPress: () -> Unit
 ) {
+    val borderColor = when {
+        isSelected -> Color(0xFF00C853)   // зелёная обводка — выбранная
+        isSwapTarget -> Color(0xFFFFE082)
+        else -> Color.Transparent
+    }
+    val shape = RoundedCornerShape(12.dp)
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = shape,
         elevation = CardDefaults.cardElevation(6.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSwapTarget) Color(0xFFFFE082) else Color.White
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         modifier = Modifier
             .fillMaxSize()
+            .then(
+                if (isSelected || isSwapTarget)
+                    Modifier.border(3.dp, borderColor, shape)
+                else Modifier
+            )
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = { onDoubleTap() },
