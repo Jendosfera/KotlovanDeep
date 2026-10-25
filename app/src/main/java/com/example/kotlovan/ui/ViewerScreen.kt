@@ -87,7 +87,6 @@ import com.example.kotlovan.util.clampOffset
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
 import com.github.panpf.zoomimage.CoilZoomAsyncImage
-import com.github.panpf.zoomimage.compose.rememberZoomState
 import com.github.panpf.zoomimage.zoom.GestureType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -96,7 +95,7 @@ import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-
+import com.github.panpf.zoomimage.compose.coil2.rememberCoilZoomState
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
 
@@ -252,10 +251,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         val imgFile = currentCell?.imageFile
         if (imgFile != null) {
-            val zoomState = rememberZoomState()
+            val zoomState = rememberCoilZoomState()
             // Отключаем все встроенные жесты ZoomImage — управляем ими сами
             LaunchedEffect(zoomState) {
-                zoomState.zoomable.setDisabledGestureTypes(-1)
+                zoomState.zoomable.disabledGestureTypes = -1
             }
 
             Box(Modifier.fillMaxSize()) {
