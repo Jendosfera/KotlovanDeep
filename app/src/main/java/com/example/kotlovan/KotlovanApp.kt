@@ -10,7 +10,7 @@ class KotlovanApp : Application(), ImageLoaderFactory {
         return ImageLoader.Builder(this)
             .bitmapConfig(Bitmap.Config.ARGB_8888)
             // Отключаем ImageDecoder, используем BitmapFactory
-            .imageDecoderEnabled(false) 
+
             .allowHardware(false) // Отключаем Hardware Bitmap
             .crossfade(false)
             .build()
