@@ -96,6 +96,12 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import com.github.panpf.zoomimage.compose.rememberZoomState
+// Для загрузки изображения через Coil 2
+import coil.compose.rememberAsyncImagePainter
+
+// Для базового компонента ZoomImage из библиотеки panpf
+import com.github.panpf.zoomimage.ZoomImage
+
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
 
@@ -254,13 +260,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             val zoomState = rememberZoomState()
             // Отключаем все встроенные жесты ZoomImage — управляем ими сами
             LaunchedEffect(zoomState) {
-                zoomState.zoomable.setDisabledGestureTypes(-1)
+                zoomState.zoomable.disabledGestureTypes = -1
             }
+			// Загружаем изображение через Coil
+			val painter = rememberAsyncImagePainter(model = vm.repo.imageFile(imgFile))
 
             Box(Modifier.fillMaxSize()) {
                 // Слой 1: рендер с subsampling
-                CoilZoomAsyncImage(
-                    model = vm.repo.imageFile(imgFile),
+                ZoomImage(
+                    painter = painter,
                     contentDescription = null,
                     zoomState = zoomState,
                     modifier = Modifier.fillMaxSize()
