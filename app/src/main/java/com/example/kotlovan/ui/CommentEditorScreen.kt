@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -290,6 +291,7 @@ private fun MoveCommentOverlay(
                 AsyncImage(
                     model = vm.repo.imageFile(f),
                     contentDescription = null,
+					filterQuality = FilterQuality.High,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier
                         .size(with(density) { fitW.toDp() }, with(density) { fitH.toDp() })

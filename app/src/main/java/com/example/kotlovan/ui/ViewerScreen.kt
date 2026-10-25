@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.graphics.FilterQuality
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -339,16 +340,17 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
                 val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
                 val cell = vm.cell(r, c)
-                val uriStr = cell?.imageUri
+                val imgFile = cell?.imageFile
                 val w = cell?.imageWidth ?: 0
                 val h = cell?.imageHeight ?: 0
                 val fs = if (w > 0 && h > 0) min(containerW / w, containerH / h) else 1f
                 val cFitW = if (w > 0) w * fs else containerW
                 val cFitH = if (h > 0) h * fs else containerH
                 Box(Modifier.fillMaxSize()) {
-                    if (uriStr != null) {
+                    if (imgFile != null) {
                         AsyncImage(
-                            model = Uri.parse(uriStr), contentDescription = null,
+                            model = vm.repo.imageFile(imgFile), contentDescription = null,
+							filterQuality = FilterQuality.High,
                             contentScale = ContentScale.FillBounds,
                             modifier = Modifier
                                 .size(with(density) { cFitW.toDp() }, with(density) { cFitH.toDp() })

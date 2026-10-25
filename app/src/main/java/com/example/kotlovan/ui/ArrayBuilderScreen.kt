@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.graphics.FilterQuality
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -333,6 +334,7 @@ private fun CreatedCell(
                     AsyncImage(
                         model = vm.repo.imageFile(f),
                         contentDescription = null,
+						filterQuality = FilterQuality.High,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )

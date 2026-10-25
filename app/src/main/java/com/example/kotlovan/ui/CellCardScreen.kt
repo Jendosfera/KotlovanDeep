@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -84,6 +85,7 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
             if (f != null) {
                 AsyncImage(
                     model = vm.repo.imageFile(f), contentDescription = null,
+					filterQuality = FilterQuality.High,
                     contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()
                 )
             } else {

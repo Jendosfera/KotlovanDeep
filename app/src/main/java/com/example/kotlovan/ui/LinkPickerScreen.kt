@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.ui.graphics.FilterQuality
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -108,6 +109,7 @@ fun LinkPickerScreen(
                 AsyncImage(
                     model = vm.repo.imageFile(imgFile),
                     contentDescription = null,
+					filterQuality = FilterQuality.High,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier
                         .size(with(density) { fitW.toDp() }, with(density) { fitH.toDp() })
