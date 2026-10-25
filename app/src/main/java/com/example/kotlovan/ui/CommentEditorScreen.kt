@@ -5,11 +5,6 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.ContextCompat
-
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,9 +57,11 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
@@ -85,6 +82,7 @@ private val PresetColors: List<Long> = listOf(
 fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int, id: String) {
     val cell = vm.cell(row, col) ?: return
     val pin = cell.comments.firstOrNull { it.id == id } ?: return
+    val ctx = LocalContext.current
 
     var title by remember { mutableStateOf(pin.title) }
     var text by remember { mutableStateOf(pin.text) }
@@ -97,57 +95,20 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
 
+    // ==== Камера ====
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
         val name = pendingPhotoName
         if (success && name != null) {
             photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+        } else if (!success && name != null) {
+            Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
         }
         pendingPhotoName = null
     }
 
-	val ctx = LocalContext.current
-
-val takePictureLauncher = rememberLauncherForActivityResult(
-		ActivityResultContracts.TakePicture()
-	) { success ->
-		val name = pendingPhotoName
-		if (success && name != null) {
-			photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
-		} else if (!success && name != null) {
-			Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
-		}
-		pendingPhotoName = null
-	}
-
-	fun launchCameraActual() {
-		val name = vm.repo.newPhotoName()
-		pendingPhotoName = name
-		try {
-			val uri = vm.repo.photoUriForNew(name)
-			takePictureLauncher.launch(uri)
-		} catch (e: Exception) {
-			pendingPhotoName = null
-			Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
-		}
-	}
-
-	val cameraPermissionLauncher = rememberLauncherForActivityResult(
-		ActivityResultContracts.RequestPermission()
-	) { granted ->
-		if (granted) launchCameraActual()
-		else Toast.makeText(ctx, "Нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
-	}
-
-	fun launchCamera() {
-		val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
-				PackageManager.PERMISSION_GRANTED
-		if (granted) launchCameraActual()
-		else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-	}
-
-    fun launchCamera() {
+    fun launchCameraActual() {
         val name = vm.repo.newPhotoName()
         pendingPhotoName = name
         try {
@@ -155,9 +116,25 @@ val takePictureLauncher = rememberLauncherForActivityResult(
             takePictureLauncher.launch(uri)
         } catch (e: Exception) {
             pendingPhotoName = null
+            Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) launchCameraActual()
+        else Toast.makeText(ctx, "Нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
+    }
+
+    fun launchCamera() {
+        val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED
+        if (granted) launchCameraActual()
+        else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    // ==== Сохранение ====
     fun save() {
         vm.setComments(row, col, cell.comments.map {
             if (it.id == id) it.copy(
@@ -169,6 +146,7 @@ val takePictureLauncher = rememberLauncherForActivityResult(
         nav.popBackStack()
     }
 
+    // ==== Режим перемещения ====
     if (moving) {
         MoveCommentOverlay(
             cell = cell, vm = vm,
@@ -184,10 +162,14 @@ val takePictureLauncher = rememberLauncherForActivityResult(
         return
     }
 
+    // ==== Основной UI ====
     Column(
-        Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())
+        Modifier
+            .fillMaxSize()
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState())
     ) {
-        // === Верхняя панель ===
+        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) {
                 Icon(Icons.Default.ArrowBack, "Назад")
@@ -229,7 +211,7 @@ val takePictureLauncher = rememberLauncherForActivityResult(
             modifier = Modifier.fillMaxWidth().height(140.dp)
         )
 
-        // === Фотографии ===
+        // Фотографии
         if (photos.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Text("Фотографии:", style = MaterialTheme.typography.titleSmall)
@@ -259,7 +241,7 @@ val takePictureLauncher = rememberLauncherForActivityResult(
         }
     }
 
-    // === Диалог стиля ===
+    // ==== Диалог стиля ====
     if (showStyleDialog) {
         AlertDialog(
             onDismissRequest = { showStyleDialog = false },
@@ -275,7 +257,10 @@ val takePictureLauncher = rememberLauncherForActivityResult(
                                     .size(28.dp)
                                     .clip(CircleShape)
                                     .background(Color(c.toInt()))
-                                    .then(if (c == color) Modifier.border(3.dp, Color.Black, CircleShape) else Modifier)
+                                    .then(
+                                        if (c == color) Modifier.border(3.dp, Color.Black, CircleShape)
+                                        else Modifier
+                                    )
                                     .clickable { color = c }
                             )
                         }
@@ -307,11 +292,13 @@ val takePictureLauncher = rememberLauncherForActivityResult(
         )
     }
 
-    // === Просмотр фото ===
+    // ==== Просмотр фото ====
     viewPhoto?.let { photo ->
         Dialog(onDismissRequest = { viewPhoto = null }) {
             Box(
-                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f))
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
                     .pointerInput(Unit) { detectTapGestures(onTap = { viewPhoto = null }) },
                 contentAlignment = Alignment.Center
             ) {
@@ -325,7 +312,7 @@ val takePictureLauncher = rememberLauncherForActivityResult(
         }
     }
 
-    // === Редактирование фото ===
+    // ==== Редактирование фото ====
     editPhoto?.let { photo ->
         var t by remember(photo.id) { mutableStateOf(photo.title) }
         var c by remember(photo.id) { mutableStateOf(photo.comment) }
@@ -368,10 +355,14 @@ val takePictureLauncher = rememberLauncherForActivityResult(
     }
 }
 
+// ==== Ячейка выбора иконки ====
+
 @Composable
 private fun IconTypeCell(
-    type: CommentIconType, selected: Boolean,
-    color: Color, onClick: () -> Unit
+    type: CommentIconType,
+    selected: Boolean,
+    color: Color,
+    onClick: () -> Unit
 ) {
     Box(
         Modifier
@@ -389,10 +380,14 @@ private fun IconTypeCell(
     ) { CommentIconShape(type = type, color = color, sizeDp = 24.dp) }
 }
 
+// ==== Перемещение комментария ====
+
 @Composable
 private fun MoveCommentOverlay(
-    cell: CellData, vm: AppViewModel,
-    initialX: Float, initialY: Float,
+    cell: CellData,
+    vm: AppViewModel,
+    initialX: Float,
+    initialY: Float,
     onCancel: () -> Unit,
     onConfirm: (nx: Float, ny: Float) -> Unit
 ) {
@@ -412,11 +407,16 @@ private fun MoveCommentOverlay(
 
         LaunchedEffect(fitW, fitH) {
             mScale = 1f
-            mOffset = Offset(containerW / 2f - initialX * fitW, containerH / 2f - initialY * fitH)
+            mOffset = Offset(
+                containerW / 2f - initialX * fitW,
+                containerH / 2f - initialY * fitH
+            )
         }
 
         Box(
-            Modifier.fillMaxSize().clipToBounds()
+            Modifier
+                .fillMaxSize()
+                .clipToBounds()
                 .pointerInput(fitW, fitH) {
                     detectViewerGestures(
                         getViewport = { Viewport(mScale, mOffset) },
@@ -444,8 +444,11 @@ private fun MoveCommentOverlay(
             }
         }
 
+        // Прицел в центре
         Box(
-            Modifier.align(Alignment.Center).size(24.dp)
+            Modifier
+                .align(Alignment.Center)
+                .size(24.dp)
                 .background(Color.Red, shape = CircleShape)
         )
 
