@@ -94,6 +94,10 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sqrt
+import com.github.panpf.zoomimage.ZoomImage
+import com.github.panpf.zoomimage.rememberZoomableState
+import coil.compose.rememberAsyncImagePainter
+
 
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
@@ -338,26 +342,60 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 },
                 label = "cellSwipe"
             ) { key ->
-                val parts = key.split(",")
-                val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
-                val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                val cell = vm.cell(r, c)
-                val imgFile = cell?.imageFile
-                val w = cell?.imageWidth ?: 0
-                val h = cell?.imageHeight ?: 0
-                val fs = if (w > 0 && h > 0) min(containerW / w, containerH / h) else 1f
-                val cFitW = if (w > 0) w * fs else containerW
-                val cFitH = if (h > 0) h * fs else containerH
-                Box(Modifier.fillMaxSize()) {
-                    if (imgFile != null) {
-                        CoilZoomAsyncImage(
-                            model = vm.repo.imageFile(imgFile),
+                val file = vm.repo.imageFile(imgFile)
+                if (file != null) {
+                    val painter = rememberAsyncImagePainter(model = file)
+                    val zoomState = rememberZoomableState()
+                
+                    Box(Modifier.fillMaxSize()) {
+                        // Слой 1: рендер с subsampling (без жестов)
+                        ZoomImage(
+                            painter = painter,
                             contentDescription = null,
+                            zoomableState = zoomState,
                             modifier = Modifier.fillMaxSize()
+                        )
+                        // Слой 2: перехват всех жестов
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .clipToBounds()
+                                .pointerInput(row, col, subMode, fitW, fitH, inLinkMode) {
+                                    detectViewerGestures(
+                                        getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
+                                        fitW = fitW, fitH = fitH,
+                                        containerW = containerW, containerH = containerH,
+                                        onTransform = { vp ->
+                                            scale = vp.scale
+                                            offsetX = vp.offset.x
+                                            offsetY = vp.offset.y
+                                            // Синхронизируем ZoomImage
+                                            zoomState.zoomable.zoomTo(
+                                                scale = vp.scale,
+                                                offset = Offset(
+                                                   vp.offset.x + fitW * vp.scale / 2f - containerW / 2f,
+                                                    vp.offset.y + fitH * vp.scale / 2f - containerH / 2f
+                                                )
+                                            )
+                                        },
+                                        onSwipe = { dx, dy -> /* ваша логика свайпа как раньше */ },
+                                        onTap = { pos -> /* ваша логика tap */ },
+                                        onLongPress = { pos -> /* ваша логика long-press */ }
+                                    )
+                                }
+                        )
+                    }
+                    // При переключении ячейки — синхронизация
+                    LaunchedEffect(row, col) {
+                        zoomState.zoomable.zoomTo(
+                            scale = scale,
+                            offset = Offset(
+                                offsetX + fitW * scale / 2f - containerW / 2f,
+                                offsetY + fitH * scale / 2f - containerH / 2f
+                            )
                         )
                     }
                 }
-            }
 
             if (currentCell != null) {
                 for (pin in currentCell.comments) {
