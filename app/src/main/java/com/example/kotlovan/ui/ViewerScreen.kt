@@ -1,6 +1,5 @@
 package com.example.kotlovan.ui
 
-import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -64,12 +63,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -77,9 +72,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Size
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.data.LinkReturnState
@@ -94,7 +86,6 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sqrt
-
 
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
@@ -145,10 +136,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .then(
-                if (inLinkMode) Modifier.border(6.dp, LinkBorderColor)
-                else Modifier
-            )
+            .then(if (inLinkMode) Modifier.border(6.dp, LinkBorderColor) else Modifier)
     ) {
         val containerW = constraints.maxWidth.toFloat()
         val containerH = constraints.maxHeight.toFloat()
@@ -247,7 +235,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         val cornerPx = with(density) { 80.dp.toPx() }
 
-        // ==== Изображение (слой 1) ====
+        // ==== Изображение ====
         AnimatedContent(
             targetState = "$row,$col",
             transitionSpec = {
@@ -276,47 +264,25 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             val cFitH = if (h > 0) h * fs else containerH
 
             Box(Modifier.fillMaxSize().clipToBounds()) {
-                if (imgFile != null) {
-                    val cell = vm.cell(r, c)
-					if (cell != null && imgFile != null) {
-					    ZoomableRegionImage(
-					        file = vm.repo.imageFile(imgFile),
-					        imageW = cell.imageWidth,
-					        imageH = cell.imageHeight,
-					        scale = scale,
-					        offsetX = offsetX,
-					        offsetY = offsetY,
-					        fitW = cFitW,
-					        fitH = cFitH,
-					        modifier = Modifier.fillMaxSize()
-					    )
-					}
-					    // Колбэк для долгого нажатия
- 					   onLongClick = { offset ->
-					        if (subMode != ViewerSubMode.VIEW) return@ZoomableAsyncImage
-					        val hit = findPinAt(currentCell, offset, fitW, fitH, scale, Offset(offsetX, offsetY))
-					        if (hit != null) {
-					            nav.navigate("comment/$row/$col/${hit.id}")
-					        } else {
-					            val cell = vm.cell(row, col) ?: return@ZoomableAsyncImage
-					            val imgX = (offset.x - offsetX) / scale
-					            val imgY = (offset.y - offsetY) / scale
-					            val nx = (imgX / fitW).coerceIn(0f, 1f)
-					            val ny = (imgY / fitH).coerceIn(0f, 1f)
-					            val cr = with(density) { 4.dp.toPx() }
-					            val rad = (cr / (fitW * scale)).coerceIn(0.0015f, 0.3f)
-					            val id = UUID.randomUUID().toString()
-					            val pin = CommentPin(id = id, x = nx, y = ny, radius = rad, color = 0xFFFF5722L)
-					            vm.setComments(row, col, cell.comments + pin)
-					            nav.navigate("comment/$row/$col/$id")
-					        }
-					    }
-					)
+                if (cell != null && imgFile != null && w > 0 && h > 0) {
+                    ZoomableRegionImage(
+                        file = vm.repo.imageFile(imgFile),
+                        imageW = w,
+                        imageH = h,
+                        containerW = containerW,
+                        containerH = containerH,
+                        scale = scale,
+                        offsetX = offsetX,
+                        offsetY = offsetY,
+                        fitW = cFitW,
+                        fitH = cFitH,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
 
-        // ==== Слой 2: перехват всех жестов ====
+        // ==== Слой перехвата жестов ====
         Box(
             Modifier
                 .fillMaxSize()
@@ -364,7 +330,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                     val now = System.currentTimeMillis()
                                     visibleTitles = if (hit.id in visibleTitles && (visibleTitles[hit.id] ?: 0L) > now)
                                         visibleTitles - hit.id
-                                    else visibleTitles + (hit.id to now + 5000)
+                                    else visibleTitles + (hit.id to (now + 5000L))
                                 }
                             }
                         },
@@ -391,7 +357,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
         )
 
-        // ==== Комментарии (слой 3) ====
+        // ==== Комментарии ====
         if (currentCell != null) {
             for (pin in currentCell.comments) {
                 CommentPinOverlay(
@@ -493,7 +459,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
             }
 
-            // Боковые панели (строки, столбцы, глаз)
+            // Боковые панели
             if (subMode == ViewerSubMode.VIEW && !inLinkMode) {
                 Column(
                     Modifier
@@ -507,7 +473,9 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             text = vm.active.rowLabels[r] ?: "R${r + 1}",
                             selected = (r == row),
                             onClick = {
-                                if (vm.cell(r, col) != null) { persistViewport(); savedRow = r; savedCol = col; row = r }
+                                if (vm.cell(r, col) != null) {
+                                    persistViewport(); savedRow = r; savedCol = col; row = r
+                                }
                             },
                             onLongClick = { labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" }
                         )
@@ -525,7 +493,9 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             text = vm.active.colLabels[c] ?: "C${c + 1}",
                             selected = (c == col),
                             onClick = {
-                                if (vm.cell(row, c) != null) { persistViewport(); savedRow = row; savedCol = c; col = c }
+                                if (vm.cell(row, c) != null) {
+                                    persistViewport(); savedRow = row; savedCol = c; col = c
+                                }
                             },
                             onLongClick = { labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" }
                         )
@@ -555,7 +525,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
-        // ==== Режим «Общая точка» ====
+        // ==== Общая точка ====
         if (subMode == ViewerSubMode.SET_COMMON_POINT) {
             BlinkingDot(modifier = Modifier.align(Alignment.Center))
             OutlinedIconButton(
@@ -577,7 +547,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             )
         }
 
-        // ==== Режим «Установить комментарий» ====
+        // ==== Установка комментария по центру ====
         if (subMode == ViewerSubMode.PLACE_COMMENT) {
             BlinkingDot(modifier = Modifier.align(Alignment.Center))
             OutlinedIconButton(
@@ -643,6 +613,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 }
+
+// ==== Хелперы ====
 
 private fun findPinAt(
     cell: CellData?, pos: Offset,
