@@ -1,5 +1,7 @@
 package com.example.kotlovan.ui
 
+import com.github.panpf.zoomimage.CoilZoomAsyncImage
+
 import androidx.compose.ui.graphics.FilterQuality
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -348,17 +350,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 val cFitH = if (h > 0) h * fs else containerH
                 Box(Modifier.fillMaxSize()) {
                     if (imgFile != null) {
-                        AsyncImage(
-                            model = vm.repo.imageFile(imgFile), contentDescription = null,
-							filterQuality = FilterQuality.High,
-                            contentScale = ContentScale.FillBounds,
-                            modifier = Modifier
-                                .size(with(density) { cFitW.toDp() }, with(density) { cFitH.toDp() })
-                                .graphicsLayer {
-                                    transformOrigin = TransformOrigin(0f, 0f)
-                                    translationX = offsetX; translationY = offsetY
-                                    scaleX = scale; scaleY = scale
-                                }
+                        CoilZoomAsyncImage(
+                            model = vm.repo.imageFile(imgFile),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
