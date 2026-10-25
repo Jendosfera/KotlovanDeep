@@ -18,6 +18,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val repo = ArrayRepository(app)
 
+	private val themeRepo = com.example.kotlovan.theme.ThemeRepository(app)
+
+	var themeProfile by mutableStateOf(themeRepo.load())
+		private set
+
+	fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
+		themeProfile = profile
+		themeRepo.save(profile)
+	}
+
+	fun resetTheme() {
+		themeRepo.reset()
+		themeProfile = themeRepo.load()
+	}
+
     var config by mutableStateOf(ArrayConfig())
         private set
 

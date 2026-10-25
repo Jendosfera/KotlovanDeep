@@ -91,3 +91,50 @@ data class LinkReturnState(
     val commentCol: Int,
     val commentId: String
 )
+// ==== Theme ====
+
+@Serializable
+enum class BgType { SOLID, GRADIENT, PATTERN }
+
+@Serializable
+enum class PatternPreset { NONE, GRID, DOTS, PAPER, BLUEPRINT, CARBON }
+
+@Serializable
+data class BackgroundSpec(
+    val type: BgType = BgType.SOLID,
+    val color: Long = 0xFFECEFF1,
+    val gradientStart: Long = 0xFFECEFF1,
+    val gradientEnd: Long = 0xFF90A4AE,
+    val patternPreset: PatternPreset = PatternPreset.NONE,
+    val patternIntensity: Float = 0.3f
+)
+
+@Serializable
+enum class ButtonShape { ROUNDED, PILL, SQUARE, DIAMOND, HEXAGON }
+
+@Serializable
+data class ButtonStyle(
+    val shape: ButtonShape = ButtonShape.ROUNDED,
+    val cornerRadius: Float = 12f,
+    val elevation: Float = 6f,
+    val pressedElevation: Float = 2f,
+    val strokeWidth: Float = 0f,
+    val strokeColor: Long = 0xFF000000
+)
+
+@Serializable
+data class ThemeColors(
+    val primary: Long = 0xFF1565C0,
+    val onPrimary: Long = 0xFFFFFFFF,
+    val surface: Long = 0xFFFFFFFF,
+    val onSurface: Long = 0xFF000000,
+    val accent: Long = 0xFF4CAF50
+)
+
+@Serializable
+data class ThemeProfile(
+    val name: String = "Стандарт",
+    val colors: ThemeColors = ThemeColors(),
+    val background: BackgroundSpec = BackgroundSpec(),
+    val buttonStyle: ButtonStyle = ButtonStyle()
+)

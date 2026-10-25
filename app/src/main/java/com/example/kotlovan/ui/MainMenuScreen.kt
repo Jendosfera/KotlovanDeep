@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.kotlovan.theme.ThemeButton
+import com.example.kotlovan.theme.themedBackground
 import com.example.kotlovan.vm.AppViewModel
 
 @Composable
@@ -69,8 +71,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
     }
 
     LaunchedEffect(showReconnectDialog, reconnectIdx, vm.pendingReconnect.size) {
-        if (showReconnectDialog &&
-            reconnectIdx >= vm.pendingReconnect.size &&
+        if (showReconnectDialog && reconnectIdx >= vm.pendingReconnect.size &&
             vm.pendingReconnect.isNotEmpty()) {
             showReconnectDialog = false
             reconnectIdx = 0
@@ -80,12 +81,15 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
     }
 
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier
+            .fillMaxSize()
+            .themedBackground()
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (vm.config.main.cells.isNotEmpty() || vm.config.aux.cells.isNotEmpty()) {
-            Button(
+            ThemeButton(
                 onClick = {
                     vm.autosave()
                     nav.navigate("viewer")
@@ -94,7 +98,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             ) { Text("Продолжить", fontSize = 20.sp) }
             Spacer(Modifier.height(16.dp))
         }
-        Button(
+        ThemeButton(
             onClick = {
                 vm.newArray()
                 nav.navigate("builder?aux=false")
@@ -106,6 +110,11 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             onClick = { loadLauncher.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) },
             modifier = Modifier.fillMaxWidth().height(64.dp)
         ) { Text("Загрузить массив", fontSize = 20.sp) }
+        Spacer(Modifier.height(32.dp))
+        OutlinedButton(
+            onClick = { nav.navigate("settings") },
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) { Text("Настроить вид", fontSize = 16.sp) }
     }
 
     if (showReconnectDialog && reconnectIdx < vm.pendingReconnect.size) {
@@ -117,8 +126,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Text(
                     "После переустановки приложения $total изображений потеряли доступ. " +
-                    "Выберите их заново, чтобы приложение снова могло их показывать. " +
-                    "Файл $current из $total."
+                    "Выберите их заново. Файл $current из $total."
                 )
             },
             confirmButton = {

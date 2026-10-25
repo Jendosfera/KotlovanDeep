@@ -28,18 +28,10 @@ fun RootNav() {
     val vm: AppViewModel = viewModel()
     val nav = rememberNavController()
 
-    NavHost(nav, startDestination = "menu") {
-        composable("menu") { MainMenuScreen(nav, vm) }
-        composable(
-            route = "builder?aux={aux}",
-            arguments = listOf(navArgument("aux") {
-                type = NavType.BoolType
-                defaultValue = false
-            })
-        ) { back ->
-            val aux = back.arguments?.getBoolean("aux") ?: false
-            ArrayBuilderScreen(nav, vm, aux)
-        }
+    com.example.kotlovan.theme.ThemeScope(vm.themeProfile) {
+        NavHost(nav, startDestination = "menu") {
+            composable("menu") { MainMenuScreen(nav, vm) }
+            composable("settings") { SettingsScreen(nav, vm) }
         composable("card/{row}/{col}") { back ->
             val row = back.arguments?.getString("row")?.toInt() ?: 0
             val col = back.arguments?.getString("col")?.toInt() ?: 0
