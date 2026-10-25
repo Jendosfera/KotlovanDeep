@@ -95,7 +95,7 @@ import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
-import com.github.panpf.zoomimage.compose.coil2.rememberCoilZoomState
+import com.github.panpf.zoomimage.compose.rememberZoomState
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
 
@@ -166,7 +166,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val iconMod = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
 
         val allRows = vm.active.cells.keys.map { it.substringBefore(',').toInt() }
-        val allCols = vm.active.cells.map { it.substringAfter(',').toInt() }
+        val allCols = vm.active.cells.keys.map { it.substringAfter(',').toInt() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
 
@@ -251,10 +251,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         val imgFile = currentCell?.imageFile
         if (imgFile != null) {
-            val zoomState = rememberCoilZoomState()
+            val zoomState = rememberZoomState()
             // Отключаем все встроенные жесты ZoomImage — управляем ими сами
             LaunchedEffect(zoomState) {
-                zoomState.zoomable.disabledGestureTypes = -1
+                zoomState.zoomable.setDisabledGestureTypes(-1)
             }
 
             Box(Modifier.fillMaxSize()) {
