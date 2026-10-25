@@ -40,6 +40,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     implementation("io.coil-kt:coil-compose:2.7.0")
 	implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
+	// Основной модуль жестов и состояния
+	implementation("me.saket.telephoto:zoomable:0.19.0")
+	// Интеграция с Coil 2 (ваш загрузчик)
+	implementation("me.saket.telephoto:zoomable-image-coil:0.19.0")
 }
 
 // Принудительно фиксируем версию androidx.core, чтобы не тянулась 1.15.0

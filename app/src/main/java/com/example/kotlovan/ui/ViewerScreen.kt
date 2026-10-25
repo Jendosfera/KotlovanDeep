@@ -94,6 +94,9 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sqrt
+import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
+import me.saket.telephoto.zoomable.rememberZoomableImageState
+import me.saket.telephoto.zoomable.EnabledZoomGestures
 
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
@@ -276,27 +279,55 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 if (imgFile != null) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(ctx)
-                            .data(vm.repo.imageFile(imgFile))
-                            .size(Size.ORIGINAL)
-                            .build(),
-                        contentDescription = null,
-                        filterQuality = FilterQuality.High,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier
-                            .size(
-                                with(density) { cFitW.toDp() },
-                                with(density) { cFitH.toDp() }
-                            )
-                            .graphicsLayer {
-                                transformOrigin = TransformOrigin(0f, 0f)
-                                translationX = offsetX
-                                translationY = offsetY
-                                scaleX = scale
-                                scaleY = scale
-                            }
-                    )
+                    ZoomableAsyncImage(
+					    model = vm.repo.imageFile(imgFile),
+					    contentDescription = null,
+					    modifier = Modifier.fillMaxSize(),
+					    imageState = rememberZoomableImageState(),
+					    // Включаем встроенные жесты: пинч-зум и панорамирование
+					    gestures = EnabledZoomGestures.ZoomAndPan,
+					    // Колбэк для одиночного тапа
+					    onClick = { offset ->
+					        if (subMode == ViewerSubMode.VIEW) {
+					            // Ваша логика: проверка угла, попадания в пин и т.д.
+ 					           val inCorner = offset.x > containerW - cornerPx && offset.y > containerH - cornerPx
+					            if (inCorner) {
+					                iconsHidden = !iconsHidden
+					                return@ZoomableAsyncImage
+					            }
+					            val hit = findPinAt(currentCell, offset, fitW, fitH, scale, Offset(offsetX, offsetY))
+					            if (hit != null) {
+					                if (hit.link != null) {
+					                    jumpToLink(hit.link, row, col, hit.id)
+					                } else {
+										                    visibleTitles = if (hit.id in visibleTitles && (visibleTitles[hit.id] ?: 0L) > now)
+ 					                       visibleTitles - hit.id
+					                    else visibleTitles + (hit.id to now + 5000)
+ 					               }
+ 					           }
+					        }
+					    },
+					    // Колбэк для долгого нажатия
+ 					   onLongClick = { offset ->
+					        if (subMode != ViewerSubMode.VIEW) return@ZoomableAsyncImage
+					        val hit = findPinAt(currentCell, offset, fitW, fitH, scale, Offset(offsetX, offsetY))
+					        if (hit != null) {
+					            nav.navigate("comment/$row/$col/${hit.id}")
+					        } else {
+					            val cell = vm.cell(row, col) ?: return@ZoomableAsyncImage
+					            val imgX = (offset.x - offsetX) / scale
+					            val imgY = (offset.y - offsetY) / scale
+					            val nx = (imgX / fitW).coerceIn(0f, 1f)
+					            val ny = (imgY / fitH).coerceIn(0f, 1f)
+					            val cr = with(density) { 4.dp.toPx() }
+					            val rad = (cr / (fitW * scale)).coerceIn(0.0015f, 0.3f)
+					            val id = UUID.randomUUID().toString()
+					            val pin = CommentPin(id = id, x = nx, y = ny, radius = rad, color = 0xFFFF5722L)
+					            vm.setComments(row, col, cell.comments + pin)
+					            nav.navigate("comment/$row/$col/$id")
+					        }
+					    }
+					)
                 }
             }
         }
