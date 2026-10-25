@@ -286,10 +286,10 @@ private fun MoveCommentOverlay(
                     )
                 }
         ) {
-            val uriStr = cell.imageUri
-            if (uriStr != null) {
+            val f = cell.imageFile
+            if (f != null) {
                 AsyncImage(
-                    model = Uri.parse(uriStr),
+                    model = vm.repo.imageFile(f,
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier

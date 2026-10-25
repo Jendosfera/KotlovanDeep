@@ -1,7 +1,5 @@
 package com.example.kotlovan.vm
 
-import com.example.kotlovan.data.LinkReturnState
-import com.example.kotlovan.data.PinLink
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -12,6 +10,8 @@ import com.example.kotlovan.data.ArrayConfig
 import com.example.kotlovan.data.ArrayRepository
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
+import com.example.kotlovan.data.LinkReturnState
+import com.example.kotlovan.data.PinLink
 import com.example.kotlovan.data.SubArray
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -24,34 +24,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hasUnsavedChanges by mutableStateOf(false)
         private set
 
-    /** Режим: false = main, true = aux. Не сохраняется между сессиями. */
-	var useAux by mutableStateOf(false)
-	
-	/** Режим просмотра перехода по ссылке. null — обычный просмотр. */
-	var linkReturn by mutableStateOf<LinkReturnState?>(null)
-	
-	/** Признак «после редактирования привязки нужно перескочить на новую точку». */
-	var pendingRejump by mutableStateOf<PinLink?>(null)
+    var useAux by mutableStateOf(false)
+    var linkReturn by mutableStateOf<LinkReturnState?>(null)
+    var pendingRejump by mutableStateOf<PinLink?>(null)
 
+    /** Ячейки (row, col), которые потеряли картинки при загрузке старого JSON. */
     var pendingReconnect by mutableStateOf(emptyList<Pair<Int, Int>>())
         private set
 
-    /** Текущий активный массив (main или aux). */
-    val active: SubArray
-        get() = if (useAux) config.aux else config.main
+    val active: SubArray get() = if (useAux) config.aux else config.main
 
     init {
-        val loaded = repo.loadAutosave()
-        if (loaded != null) config = normalize(loaded)
+        repo.loadAutosave()?.let { config = normalize(it) }
     }
-
-	fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?) {
-		updateCell(r, c) { cell ->
-			cell.copy(comments = cell.comments.map {
-				if (it.id == id) it.copy(link = link) else it
-			})
-		}
-	}
 
     fun newArray() {
         config = ArrayConfig()
@@ -60,15 +45,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun load(uri: Uri): Boolean {
-        val c = repo.loadFromUri(uri) ?: return false
-        config = normalize(c)
+        // 1) Пробуем ZIP
+        val fromZip = repo.loadFromZip(uri)
+        if (fromZip != null) {
+            config = normalize(fromZip)
+            useAux = false
+            pendingReconnect = emptyList()
+            hasUnsavedChanges = false
+            return true
+        }
+        // 2) Фоллбэк — JSON
+        val fromJson = repo.loadFromUri(uri) ?: return false
+        config = normalize(fromJson)   // миграция imageUri -> imageFile
         useAux = false
-
         val missing = mutableListOf<Pair<Int, Int>>()
-        val collect = { sub: SubArray ->
+        fun collect(sub: SubArray) {
             sub.cells.forEach { (key, cell) ->
-                val u = cell.imageUri ?: return@forEach
-                if (!repo.hasPersistablePermission(Uri.parse(u))) {
+                if (cell.imageFile == null && cell.imageUri != null) {
                     val parts = key.split(",")
                     val r = parts.getOrNull(0)?.toIntOrNull() ?: return@forEach
                     val cc = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach
@@ -85,19 +78,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun clearPendingReconnect() { pendingReconnect = emptyList() }
 
     fun reconnectImage(r: Int, c: Int, uri: Uri) {
-        repo.takePersistablePermission(uri)
-        val sz = repo.getImageSize(uri)
-        // Ищем в обоих subarray
+        val name = repo.importImage(uri) ?: return
+        val sz = repo.getImageSize(name)
         config = config.copy(
             main = if (config.main.cell(r, c) != null) config.main.copy(
                 cells = config.main.cells + (config.main.key(r, c) to config.main.cell(r, c)!!.copy(
-                    imageUri = uri.toString(),
+                    imageFile = name, imageUri = null,
                     imageWidth = sz?.first ?: 0, imageHeight = sz?.second ?: 0
                 ))
             ) else config.main,
             aux = if (config.aux.cell(r, c) != null) config.aux.copy(
                 cells = config.aux.cells + (config.aux.key(r, c) to config.aux.cell(r, c)!!.copy(
-                    imageUri = uri.toString(),
+                    imageFile = name, imageUri = null,
                     imageWidth = sz?.first ?: 0, imageHeight = sz?.second ?: 0
                 ))
             ) else config.aux
@@ -105,7 +97,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun save(uri: Uri): Boolean {
-        val ok = repo.saveToUri(config, uri)
+        val ok = repo.saveAsZip(config, uri)
         if (ok) hasUnsavedChanges = false
         return ok
     }
@@ -156,6 +148,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(colLabels = if (label.isBlank()) it.colLabels - c else it.colLabels + (c to label))
     }
 
+    fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?) {
+        updateCell(r, c) { cell ->
+            cell.copy(comments = cell.comments.map {
+                if (it.id == id) it.copy(link = link) else it
+            })
+        }
+    }
+
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)
         hasUnsavedChanges = true
@@ -167,16 +167,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
+    /** Миграция imageUri -> imageFile + подтягивание размеров. */
     private fun normalize(src: ArrayConfig): ArrayConfig {
         fun fixSub(sub: SubArray): SubArray = sub.copy(
             cells = sub.cells.mapValues { (_, cell) ->
-                val u = cell.imageUri ?: return@mapValues cell
-                val parsed = Uri.parse(u)
-                repo.takePersistablePermission(parsed)
-                if (cell.imageWidth == 0) {
-                    val sz = repo.getImageSize(parsed)
-                    if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
-                } else cell
+                when {
+                    cell.imageFile == null && cell.imageUri != null -> {
+                        val name = repo.importImage(Uri.parse(cell.imageUri))
+                        if (name != null) {
+                            val sz = repo.getImageSize(name)
+                            cell.copy(
+                                imageFile = name, imageUri = null,
+                                imageWidth = sz?.first ?: cell.imageWidth,
+                                imageHeight = sz?.second ?: cell.imageHeight
+                            )
+                        } else cell   // URI мёртв — оставляем как есть, попадёт в pendingReconnect
+                    }
+                    cell.imageFile != null && cell.imageWidth == 0 -> {
+                        val sz = repo.getImageSize(cell.imageFile)
+                        if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
+                    }
+                    else -> cell
+                }
             }
         )
         return src.copy(main = fixSub(src.main), aux = fixSub(src.aux))

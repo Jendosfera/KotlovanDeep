@@ -103,10 +103,10 @@ fun LinkPickerScreen(
                     )
                 }
         ) {
-            val uriStr = currentCell?.imageUri
-            if (uriStr != null) {
+            val imgFile = currentCell?.imageFile
+            if (imgFile != null) {
                 AsyncImage(
-                    model = Uri.parse(uriStr),
+                    model = vm.repo.imageFile(imgFile),
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier

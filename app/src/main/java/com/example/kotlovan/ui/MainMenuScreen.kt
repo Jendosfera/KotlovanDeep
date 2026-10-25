@@ -103,7 +103,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         ) { Text("Создать массив", fontSize = 20.sp) }
         Spacer(Modifier.height(16.dp))
         OutlinedButton(
-            onClick = { loadLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+            onClick = { loadLauncher.launch(arrayOf("application/zip", "application/json", "application/octet-stream", "*/*")) },
             modifier = Modifier.fillMaxWidth().height(64.dp)
         ) { Text("Загрузить массив", fontSize = 20.sp) }
     }

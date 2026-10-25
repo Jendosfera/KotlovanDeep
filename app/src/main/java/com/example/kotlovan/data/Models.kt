@@ -31,6 +31,9 @@ data class CommentPin(
 @Serializable
 data class CellData(
     val title: String = "",
+    /** Имя файла в filesDir/cell_images/ — используется в ZIP-формате. */
+    val imageFile: String? = null,
+    /** Устаревшее поле — только для чтения старых JSON; при normalize мигрируется в imageFile. */
     val imageUri: String? = null,
     val imageWidth: Int = 0,
     val imageHeight: Int = 0,
@@ -66,6 +69,7 @@ data class ArrayConfig(
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )
+
 @Serializable
 data class LinkReturnState(
     val isAux: Boolean,

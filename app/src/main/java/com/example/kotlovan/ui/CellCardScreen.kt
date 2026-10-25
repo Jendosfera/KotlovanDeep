@@ -1,6 +1,5 @@
 package com.example.kotlovan.ui
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -46,7 +45,7 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
 
     var title by remember { mutableStateOf(existing?.title ?: "") }
     var titleTouched by remember { mutableStateOf(!existing?.title.isNullOrBlank()) }
-    var imageUri by remember { mutableStateOf(existing?.imageUri) }
+    var imageFile by remember { mutableStateOf(existing?.imageFile) }
     var imgW by remember { mutableIntStateOf(existing?.imageWidth ?: 0) }
     var imgH by remember { mutableIntStateOf(existing?.imageHeight ?: 0) }
 
@@ -54,12 +53,12 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            vm.repo.takePersistablePermission(uri)
-            imageUri = uri.toString()
-            vm.repo.getImageSize(uri)?.let { (w, h) -> imgW = w; imgH = h }
-            // Если пользователь ещё не вводил название — берём имя файла
-            if (!titleTouched) {
-                vm.repo.getDisplayName(uri)?.let { title = it }
+            vm.repo.importImage(uri)?.let { name ->
+                imageFile = name
+                vm.repo.getImageSize(name)?.let { (w, h) -> imgW = w; imgH = h }
+                if (!titleTouched) {
+                    vm.repo.getDisplayName(uri)?.let { title = it }
+                }
             }
         }
     }
@@ -81,10 +80,10 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
             Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(12.dp)).background(Color(0xFFECEFF1)),
             contentAlignment = Alignment.Center
         ) {
-            val u = imageUri
-            if (u != null) {
+            val f = imageFile
+            if (f != null) {
                 AsyncImage(
-                    model = Uri.parse(u), contentDescription = null,
+                    model = vm.repo.imageFile(f), contentDescription = null,
                     contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()
                 )
             } else {
@@ -103,7 +102,8 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                         if (vm.useAux) it.copy(ownPosition = true) else it
                     }
                     vm.upsertCell(row, col, base.copy(
-                        title = title, imageUri = imageUri, imageWidth = imgW, imageHeight = imgH
+                        title = title, imageFile = imageFile, imageUri = null,
+                        imageWidth = imgW, imageHeight = imgH
                     ))
                     nav.popBackStack()
                 },

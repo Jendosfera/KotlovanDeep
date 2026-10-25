@@ -78,12 +78,12 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var initialized by remember(aux) { mutableStateOf(false) }
 	var showNameDialog by remember { mutableStateOf(false) }
-	var fileName by remember { mutableStateOf("array.json") }
+	var fileName by remember { mutableStateOf("array.zip") }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
     val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
             try {
@@ -265,7 +265,7 @@ if (showNameDialog) {
         confirmButton = {
             TextButton(onClick = {
                 showNameDialog = false
-                val name = if (fileName.contains('.')) fileName else "$fileName.json"
+                val name = if (fileName.endsWith(".zip")) fileName else "$fileName.zip"
                 saveLauncher.launch(name)
             }) { Text("Сохранить") }
         },
@@ -314,9 +314,9 @@ private fun CreatedCell(
             Text(data.title.ifBlank { "Без названия" }, maxLines = 1, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
             Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFFCFD8DC))) {
-                data.imageUri?.let { u ->
+                data.imageFile?.let { f ->
                     AsyncImage(
-                        model = android.net.Uri.parse(u), contentDescription = null,
+                        model = vm.repo.imageFile(f), contentDescription = null,
                         contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                     )
                 }
