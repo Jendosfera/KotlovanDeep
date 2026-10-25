@@ -1,12 +1,12 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,15 +25,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,13 +56,16 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentIconType
+import com.example.kotlovan.data.CommentPhoto
 import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
+import java.util.UUID
 import kotlin.math.min
 
 private val PresetColors: List<Long> = listOf(
@@ -79,15 +82,49 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     var text by remember { mutableStateOf(pin.text) }
     var color by remember { mutableLongStateOf(pin.color) }
     var iconType by remember { mutableStateOf(pin.iconType) }
-    var confirmDelete by remember { mutableStateOf(false) }
+    var photos by remember { mutableStateOf(pin.photos) }
     var moving by remember { mutableStateOf(false) }
+    var showStyleDialog by remember { mutableStateOf(false) }
+    var viewPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
+    var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
+    var pendingPhotoName by remember { mutableStateOf<String?>(null) }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        val name = pendingPhotoName
+        if (success && name != null) {
+            photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+        }
+        pendingPhotoName = null
+    }
+
+    fun launchCamera() {
+        val name = vm.repo.newPhotoName()
+        pendingPhotoName = name
+        try {
+            val uri = vm.repo.photoUriForNew(name)
+            takePictureLauncher.launch(uri)
+        } catch (e: Exception) {
+            pendingPhotoName = null
+        }
+    }
+
+    fun save() {
+        vm.setComments(row, col, cell.comments.map {
+            if (it.id == id) it.copy(
+                title = title, text = text, color = color,
+                iconType = iconType, photos = photos
+            ) else it
+        })
+        vm.autosave()
+        nav.popBackStack()
+    }
 
     if (moving) {
         MoveCommentOverlay(
-            cell = cell,
-            vm = vm,
-            initialX = pin.x,
-            initialY = pin.y,
+            cell = cell, vm = vm,
+            initialX = pin.x, initialY = pin.y,
             onCancel = { moving = false },
             onConfirm = { nx, ny ->
                 vm.setComments(row, col, cell.comments.map {
@@ -100,24 +137,38 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     }
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())
     ) {
+        // === Верхняя панель ===
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Назад") }
-            Text("Комментарий", style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = { nav.popBackStack() }) {
+                Icon(Icons.Default.ArrowBack, "Назад")
+            }
+            Text("Комментарий", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.weight(1f))
+            IconButton(onClick = { launchCamera() }) {
+                Icon(Icons.Default.PhotoCamera, "Прикрепить фото")
+            }
+            IconButton(onClick = { showStyleDialog = true }) {
+                Icon(Icons.Default.Mood, "Стиль")
+            }
             IconButton(onClick = { nav.navigate("linkpicker/$row/$col/$id") }) {
                 Icon(
                     Icons.Default.Link,
-                    contentDescription = "Ссылка на другую ячейку",
+                    "Ссылка",
+                    modifier = Modifier.size(28.dp),
                     tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray
                 )
             }
+            IconButton(onClick = { moving = true }) {
+                Icon(Icons.Default.GpsFixed, "Переместить")
+            }
+            IconButton(onClick = { save() }) {
+                Icon(Icons.Default.Save, "Сохранить")
+            }
         }
-        Spacer(Modifier.height(12.dp))
+
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = title, onValueChange = { title = it },
             label = { Text("Короткое название") },
@@ -127,125 +178,173 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         OutlinedTextField(
             value = text, onValueChange = { text = it },
             label = { Text("Текст комментария") },
-            modifier = Modifier.fillMaxWidth().height(150.dp)
+            modifier = Modifier.fillMaxWidth().height(140.dp)
         )
 
-        Spacer(Modifier.height(16.dp))
-        Text("Цвет:", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (c in PresetColors) {
-                val selected = (c == color)
-                Box(
-                    Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(Color(c.toInt()))
-                        .then(
-                            if (selected) Modifier.border(3.dp, Color.Black, CircleShape)
-                            else Modifier
-                        )
-                        .clickable { color = c }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        Text("Тип иконки:", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (t in listOf(
-                CommentIconType.CIRCLE, CommentIconType.SQUARE,
-                CommentIconType.TRIANGLE, CommentIconType.DIAMOND
-            )) {
-                IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (t in listOf(
-                CommentIconType.ROSETTE, CommentIconType.PHONE, CommentIconType.COMPUTER
-            )) {
-                IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(
-            onClick = { moving = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Edit, null); Text(" Переместить на изображении")
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { confirmDelete = true },
-                modifier = Modifier.weight(1f)
+        // === Фотографии ===
+        if (photos.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text("Фотографии:", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Delete, null); Text(" Удалить")
+                for (photo in photos) {
+                    AsyncImage(
+                        model = vm.repo.photoFile(photo.file),
+                        contentDescription = photo.title.ifBlank { "Фото" },
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFECEFF1))
+                            .pointerInput(photo.id) {
+                                detectTapGestures(
+                                    onDoubleTap = { viewPhoto = photo },
+                                    onLongPress = { editPhoto = photo }
+                                )
+                            }
+                    )
+                }
             }
-            Button(
-                onClick = {
-                    vm.setComments(row, col, cell.comments.map {
-                        if (it.id == id) it.copy(
-                            title = title, text = text, color = color, iconType = iconType
-                        ) else it
-                    })
-                    nav.popBackStack()
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("Сохранить") }
         }
     }
 
-    if (confirmDelete) {
+    // === Диалог стиля ===
+    if (showStyleDialog) {
         AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Удалить комментарий?") },
-            text = { Text("Действие нельзя отменить") },
+            onDismissRequest = { showStyleDialog = false },
+            title = { Text("Стиль комментария") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("Цвет:", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (c in PresetColors) {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(c.toInt()))
+                                    .then(if (c == color) Modifier.border(3.dp, Color.Black, CircleShape) else Modifier)
+                                    .clickable { color = c }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Иконка:", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (t in listOf(
+                            CommentIconType.CIRCLE, CommentIconType.SQUARE,
+                            CommentIconType.TRIANGLE, CommentIconType.DIAMOND
+                        )) {
+                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (t in listOf(
+                            CommentIconType.ROSETTE, CommentIconType.PHONE, CommentIconType.COMPUTER
+                        )) {
+                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStyleDialog = false }) { Text("OK") }
+            }
+        )
+    }
+
+    // === Просмотр фото ===
+    viewPhoto?.let { photo ->
+        Dialog(onDismissRequest = { viewPhoto = null }) {
+            Box(
+                Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f))
+                    .pointerInput(Unit) { detectTapGestures(onTap = { viewPhoto = null }) },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = vm.repo.photoFile(photo.file),
+                    contentDescription = photo.title,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
+            }
+        }
+    }
+
+    // === Редактирование фото ===
+    editPhoto?.let { photo ->
+        var t by remember(photo.id) { mutableStateOf(photo.title) }
+        var c by remember(photo.id) { mutableStateOf(photo.comment) }
+        AlertDialog(
+            onDismissRequest = { editPhoto = null },
+            title = { Text("Фотография") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = t, onValueChange = { t = it },
+                        label = { Text("Название") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = c, onValueChange = { c = it },
+                        label = { Text("Комментарий") },
+                        modifier = Modifier.fillMaxWidth().height(100.dp)
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.setComments(row, col, cell.comments.filterNot { it.id == id })
-                    confirmDelete = false; nav.popBackStack()
-                }) { Text("Удалить") }
+                    photos = photos.map {
+                        if (it.id == photo.id) it.copy(title = t, comment = c) else it
+                    }
+                    editPhoto = null
+                }) { Text("Сохранить") }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } }
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        photos = photos.filterNot { it.id == photo.id }
+                        editPhoto = null
+                    }) { Text("Удалить", color = Color.Red) }
+                    TextButton(onClick = { editPhoto = null }) { Text("Отмена") }
+                }
+            }
         )
     }
 }
 
 @Composable
 private fun IconTypeCell(
-    type: CommentIconType,
-    selected: Boolean,
-    color: Color,
-    onClick: () -> Unit
+    type: CommentIconType, selected: Boolean,
+    color: Color, onClick: () -> Unit
 ) {
     Box(
         Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(40.dp)
+            .clip(RoundedCornerShape(6.dp))
             .background(if (selected) Color(0xFFE0E0E0) else Color.White)
             .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) Color.Black else Color.LightGray,
-                shape = RoundedCornerShape(8.dp)
+                if (selected) 2.dp else 1.dp,
+                if (selected) Color.Black else Color.LightGray,
+                RoundedCornerShape(6.dp)
             )
             .clickable(onClick = onClick)
-            .padding(10.dp),
+            .padding(8.dp),
         contentAlignment = Alignment.Center
-    ) {
-        CommentIconShape(type = type, color = color, sizeDp = 28.dp)
-    }
+    ) { CommentIconShape(type = type, color = color, sizeDp = 24.dp) }
 }
 
 @Composable
 private fun MoveCommentOverlay(
-    cell: CellData,
-    vm: AppViewModel,
-    initialX: Float,
-    initialY: Float,
+    cell: CellData, vm: AppViewModel,
+    initialX: Float, initialY: Float,
     onCancel: () -> Unit,
     onConfirm: (nx: Float, ny: Float) -> Unit
 ) {
@@ -259,23 +358,17 @@ private fun MoveCommentOverlay(
 
         val imageW = cell.imageWidth
         val imageH = cell.imageHeight
-        val fitScale = if (imageW > 0 && imageH > 0)
-            min(containerW / imageW, containerH / imageH) else 1f
+        val fitScale = if (imageW > 0 && imageH > 0) min(containerW / imageW, containerH / imageH) else 1f
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
         LaunchedEffect(fitW, fitH) {
             mScale = 1f
-            mOffset = Offset(
-                containerW / 2f - initialX * fitW,
-                containerH / 2f - initialY * fitH
-            )
+            mOffset = Offset(containerW / 2f - initialX * fitW, containerH / 2f - initialY * fitH)
         }
 
         Box(
-            Modifier
-                .fillMaxSize()
-                .clipToBounds()
+            Modifier.fillMaxSize().clipToBounds()
                 .pointerInput(fitW, fitH) {
                     detectViewerGestures(
                         getViewport = { Viewport(mScale, mOffset) },
@@ -291,7 +384,6 @@ private fun MoveCommentOverlay(
                 AsyncImage(
                     model = vm.repo.imageFile(f),
                     contentDescription = null,
-					filterQuality = FilterQuality.High,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier
                         .size(with(density) { fitW.toDp() }, with(density) { fitH.toDp() })
@@ -316,10 +408,10 @@ private fun MoveCommentOverlay(
 
         IconButton(
             onClick = {
-                val centerX = containerW / 2f
-                val centerY = containerH / 2f
-                val imgX = (centerX - mOffset.x) / mScale
-                val imgY = (centerY - mOffset.y) / mScale
+                val cx = containerW / 2f
+                val cy = containerH / 2f
+                val imgX = (cx - mOffset.x) / mScale
+                val imgY = (cy - mOffset.y) / mScale
                 val nx = (imgX / fitW).coerceIn(0f, 1f)
                 val ny = (imgY / fitH).coerceIn(0f, 1f)
                 onConfirm(nx, ny)

@@ -16,6 +16,14 @@ data class PinLink(
 )
 
 @Serializable
+data class CommentPhoto(
+    val id: String,
+    val file: String,
+    val title: String = "",
+    val comment: String = ""
+)
+
+@Serializable
 data class CommentPin(
     val id: String,
     val x: Float,
@@ -25,7 +33,8 @@ data class CommentPin(
     val text: String = "",
     val color: Long = 0xFFFF5722L,
     val iconType: CommentIconType = CommentIconType.CIRCLE,
-    val link: PinLink? = null
+    val link: PinLink? = null,
+    val photos: List<CommentPhoto> = emptyList()
 )
 
 @Serializable

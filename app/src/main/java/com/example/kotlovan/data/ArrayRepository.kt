@@ -34,6 +34,22 @@ class ArrayRepository(private val context: Context) {
         } catch (e: Exception) { Log.e("Kotlovan", "importImage", e); null }
     }
 
+	fun newPhotoName(): String =
+		"photo_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.jpg"
+	
+	fun photoFile(name: String): File = File(imagesDir, name)
+
+	fun photoUriForNew(name: String): Uri {
+		val f = File(imagesDir, name)
+		f.parentFile?.mkdirs()
+		if (!f.exists()) f.createNewFile()
+		return androidx.core.content.FileProvider.getUriForFile(
+			context,
+			"${context.packageName}.fileprovider",
+			f
+		)
+	}
+
     fun imageFile(name: String): File = File(imagesDir, name)
 
     fun getImageSize(fileName: String): Pair<Int, Int>? {
@@ -73,32 +89,37 @@ class ArrayRepository(private val context: Context) {
     // ─────────── ZIP сохранение / загрузка ───────────
 
     fun saveAsZip(config: ArrayConfig, uri: Uri): Boolean {
-        return try {
-            context.contentResolver.openOutputStream(uri)?.use { out ->
-                ZipOutputStream(out).use { zip ->
-                    zip.setLevel(0)   // STORE — JPG уже сжаты, повторное сжатие бессмысленно
-                    zip.putNextEntry(ZipEntry("array.json"))
-                    zip.write(json.encodeToString(ArrayConfig.serializer(), config).toByteArray())
-                    zip.closeEntry()
+		return try {
+			context.contentResolver.openOutputStream(uri)?.use { out ->
+				ZipOutputStream(out).use { zip ->
+					zip.setLevel(0)
+					zip.putNextEntry(ZipEntry("array.json"))
+					zip.write(json.encodeToString(ArrayConfig.serializer(), config).toByteArray())
+					zip.closeEntry()
 
-                    val used = LinkedHashSet<String>()
-                    fun collect(sub: SubArray) {
-                        for ((_, cell) in sub.cells) cell.imageFile?.let { used += it }
-                    }
-                    collect(config.main); collect(config.aux)
+					val used = LinkedHashSet<String>()
+					fun collect(sub: SubArray) {
+						for ((_, cell) in sub.cells) {
+							cell.imageFile?.let { used += it }
+							for (pin in cell.comments) {
+								for (ph in pin.photos) used += ph.file  // ← новое
+							}
+						}
+					}
+					collect(config.main); collect(config.aux)
 
-                    for (name in used) {
-                        val f = File(imagesDir, name)
-                        if (!f.exists()) continue
-                        zip.putNextEntry(ZipEntry("images/$name"))
-                        f.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
-                    }
-                }
-            }
-            true
-        } catch (e: Exception) { Log.e("Kotlovan", "saveAsZip", e); false }
-    }
+					for (name in used) {
+						val f = File(imagesDir, name)
+						if (!f.exists()) continue
+						zip.putNextEntry(ZipEntry("images/$name"))
+						f.inputStream().use { it.copyTo(zip) }
+						zip.closeEntry()
+					}
+				}
+			}
+			true
+		} catch (e: Exception) { Log.e("Kotlovan", "saveAsZip", e); false }
+	}
 
     fun loadFromZip(uri: Uri): ArrayConfig? {
         return try {

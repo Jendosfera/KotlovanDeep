@@ -33,23 +33,32 @@ fun ZoomableRegionImage(
     var regionBitmap by remember(file) { mutableStateOf<Bitmap?>(null) }
     var regionRect by remember(file) { mutableStateOf<Rect?>(null) }
     var decoder by remember(file) { mutableStateOf<BitmapRegionDecoder?>(null) }
+    // Флаг: первый тайл грузим без debounce
+    var hasLoadedTile by remember(file) { mutableStateOf(false) }
 
     LaunchedEffect(file) {
         baseBitmap = withContext(Dispatchers.IO) { decodeSubsampled(file, 2048) }
         decoder = withContext(Dispatchers.IO) {
-            try { BitmapRegionDecoder.newInstance(file.absolutePath, false) } catch (_: Exception) { null }
+            try { BitmapRegionDecoder.newInstance(file.absolutePath, false) }
+            catch (_: Exception) { null }
         }
     }
 
-    LaunchedEffect(file, scale, offsetX, offsetY, fitW, fitH, containerW, containerH) {
-        val dec = decoder
-        if (scale < 1.5f || dec == null || imageW <= 0 || imageH <= 0) {
+    LaunchedEffect(
+        file, scale, offsetX, offsetY, fitW, fitH, containerW, containerH, decoder
+    ) {
+        val dec = decoder ?: return@LaunchedEffect
+        if (scale < 1.2f || imageW <= 0 || imageH <= 0) {
             regionBitmap?.recycle()
             regionBitmap = null
             regionRect = null
             return@LaunchedEffect
         }
-        delay(120)
+
+        // Debounce только для последующих изменений (жест). Первый — сразу.
+        if (hasLoadedTile) {
+            delay(120)
+        }
 
         val fitScale = fitW / imageW
         val inv = 1f / (fitScale * scale)
@@ -73,6 +82,7 @@ fun ZoomableRegionImage(
             try { dec.decodeRegion(rect, BitmapFactory.Options().apply { inSampleSize = 1 }) }
             catch (_: Exception) { null }
         }
+        hasLoadedTile = true
         if (bmp != null) {
             regionBitmap?.recycle()
             regionBitmap = bmp
@@ -83,16 +93,13 @@ fun ZoomableRegionImage(
     Canvas(modifier = modifier) {
         drawIntoCanvas { canvas ->
             val native = canvas.nativeCanvas
-
-            val base = baseBitmap
-            if (base != null) {
+            baseBitmap?.let { base ->
                 native.save()
                 native.translate(offsetX, offsetY)
                 native.scale(scale, scale)
                 native.drawBitmap(base, null, Rect(0, 0, fitW.roundToInt(), fitH.roundToInt()), null)
                 native.restore()
             }
-
             val region = regionBitmap
             val rect = regionRect
             if (region != null && rect != null) {
@@ -101,7 +108,6 @@ fun ZoomableRegionImage(
                 val screenTop = offsetY + rect.top * fitScale * scale
                 val screenW = rect.width() * fitScale * scale
                 val screenH = rect.height() * fitScale * scale
-
                 native.save()
                 native.translate(screenLeft, screenTop)
                 native.scale(screenW / region.width, screenH / region.height)
@@ -126,6 +132,5 @@ private fun decodeSubsampled(file: File, maxSize: Int): Bitmap? {
     if (opts.outWidth <= 0) return null
     var sample = 1
     while (opts.outWidth / sample > maxSize || opts.outHeight / sample > maxSize) sample *= 2
-    val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sample }
-    return BitmapFactory.decodeFile(file.absolutePath, decodeOpts)
+    return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
 }
