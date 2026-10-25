@@ -94,9 +94,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sqrt
-import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
-import me.saket.telephoto.zoomable.rememberZoomableImageState
-import me.saket.telephoto.zoomable.EnabledZoomGestures
+
 
 private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
 private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
@@ -279,34 +277,20 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 if (imgFile != null) {
-                    ZoomableAsyncImage(
-					    model = vm.repo.imageFile(imgFile),
-					    contentDescription = null,
-					    modifier = Modifier.fillMaxSize(),
-					    imageState = rememberZoomableImageState(),
-					    // Включаем встроенные жесты: пинч-зум и панорамирование
-					    gestures = EnabledZoomGestures.ZoomAndPan,
-					    // Колбэк для одиночного тапа
-					    onClick = { offset ->
-					        if (subMode == ViewerSubMode.VIEW) {
-					            // Ваша логика: проверка угла, попадания в пин и т.д.
- 					           val inCorner = offset.x > containerW - cornerPx && offset.y > containerH - cornerPx
-					            if (inCorner) {
-					                iconsHidden = !iconsHidden
-					                return@ZoomableAsyncImage
-					            }
-					            val hit = findPinAt(currentCell, offset, fitW, fitH, scale, Offset(offsetX, offsetY))
-					            if (hit != null) {
-					                if (hit.link != null) {
-					                    jumpToLink(hit.link, row, col, hit.id)
-					                } else {
-										                    visibleTitles = if (hit.id in visibleTitles && (visibleTitles[hit.id] ?: 0L) > now)
- 					                       visibleTitles - hit.id
-					                    else visibleTitles + (hit.id to now + 5000)
- 					               }
- 					           }
-					        }
-					    },
+                    val cell = vm.cell(r, c)
+					if (cell != null && imgFile != null) {
+					    ZoomableRegionImage(
+					        file = vm.repo.imageFile(imgFile),
+					        imageW = cell.imageWidth,
+					        imageH = cell.imageHeight,
+					        scale = scale,
+					        offsetX = offsetX,
+					        offsetY = offsetY,
+					        fitW = cFitW,
+					        fitH = cFitH,
+					        modifier = Modifier.fillMaxSize()
+					    )
+					}
 					    // Колбэк для долгого нажатия
  					   onLongClick = { offset ->
 					        if (subMode != ViewerSubMode.VIEW) return@ZoomableAsyncImage
