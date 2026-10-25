@@ -22,7 +22,8 @@ suspend fun PointerInputScope.detectViewerGestures(
     tapThreshold: Float = 20f,
     longPressMs: Long = 500,
     minScale: Float = 0.3f,
-    maxScale: Float = 12f
+    maxScale: Float = 12f,
+    consumeAll: Boolean = false   // ← новое
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
@@ -37,6 +38,8 @@ suspend fun PointerInputScope.detectViewerGestures(
 
         do {
             val event = awaitPointerEvent()
+            if (consumeAll) event.changes.forEach { it.consume() }   // ← поглощаем для ZoomImage
+
             val pressed = event.changes.filter { it.pressed }
 
             if (pressed.size >= 2) {
