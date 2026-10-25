@@ -39,7 +39,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     implementation("io.coil-kt:coil-compose:2.7.0")
-	implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.1.0")
+	implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
 }
 
 // Принудительно фиксируем версию androidx.core, чтобы не тянулась 1.15.0
