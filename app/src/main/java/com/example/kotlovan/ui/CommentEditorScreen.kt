@@ -1,7 +1,7 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.material.icons.filled.Link
-import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -44,13 +45,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -84,6 +84,7 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     if (moving) {
         MoveCommentOverlay(
             cell = cell,
+            vm = vm,
             initialX = pin.x,
             initialY = pin.y,
             onCancel = { moving = false },
@@ -151,7 +152,6 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         Spacer(Modifier.height(16.dp))
         Text("Тип иконки:", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
-        // Первая строка: 4 базовые фигуры
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (t in listOf(
                 CommentIconType.CIRCLE, CommentIconType.SQUARE,
@@ -161,7 +161,6 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
             }
         }
         Spacer(Modifier.height(8.dp))
-        // Вторая строка: 3 значка
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for (t in listOf(
                 CommentIconType.ROSETTE, CommentIconType.PHONE, CommentIconType.COMPUTER
@@ -243,6 +242,7 @@ private fun IconTypeCell(
 @Composable
 private fun MoveCommentOverlay(
     cell: CellData,
+    vm: AppViewModel,
     initialX: Float,
     initialY: Float,
     onCancel: () -> Unit,
@@ -263,7 +263,6 @@ private fun MoveCommentOverlay(
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
-        // Центрируем так, чтобы изначально комментарий был в центре
         LaunchedEffect(fitW, fitH) {
             mScale = 1f
             mOffset = Offset(
@@ -289,7 +288,7 @@ private fun MoveCommentOverlay(
             val f = cell.imageFile
             if (f != null) {
                 AsyncImage(
-                    model = vm.repo.imageFile(f,
+                    model = vm.repo.imageFile(f),
                     contentDescription = null,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier

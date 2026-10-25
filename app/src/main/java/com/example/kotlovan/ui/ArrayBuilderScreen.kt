@@ -1,8 +1,5 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,7 +32,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -69,7 +69,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
 
-    // Синхронизируем режим VM с параметром навигации
     LaunchedEffect(aux) { vm.useAux = aux }
 
     var scale by remember(aux) { mutableStateOf(1f) }
@@ -77,8 +76,9 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var initialized by remember(aux) { mutableStateOf(false) }
-	var showNameDialog by remember { mutableStateOf(false) }
-	var fileName by remember { mutableStateOf("array.zip") }
+
+    var showNameDialog by remember { mutableStateOf(false) }
+    var fileName by remember { mutableStateOf("array.zip") }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
@@ -171,6 +171,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                         when {
                             data != null -> CreatedCell(
                                 data = data,
+                                vm = vm,
                                 isSelected = isSelected,
                                 isSwapTarget = longPressMode && selectedForSwap != null &&
                                         (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
@@ -199,7 +200,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             }
         }
 
-        // Верхняя панель: назад, замок
         Row(
             Modifier.fillMaxWidth().padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -222,7 +222,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             }
         }
 
-        // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
                 Button(
@@ -249,31 +248,32 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
         }
     }
 
+    if (showNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("Название сохранения") },
+            text = {
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    label = { Text("Имя файла") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNameDialog = false
+                    val name = if (fileName.endsWith(".zip")) fileName else "$fileName.zip"
+                    saveLauncher.launch(name)
+                }) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNameDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+
     DisposableEffect(Unit) { onDispose { vm.autosave() } }
-if (showNameDialog) {
-    AlertDialog(
-        onDismissRequest = { showNameDialog = false },
-        title = { Text("Название сохранения") },
-        text = {
-            OutlinedTextField(
-                value = fileName,
-                onValueChange = { fileName = it },
-                label = { Text("Имя файла") },
-                singleLine = true
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                showNameDialog = false
-                val name = if (fileName.endsWith(".zip")) fileName else "$fileName.zip"
-                saveLauncher.launch(name)
-            }) { Text("Сохранить") }
-        },
-        dismissButton = {
-            TextButton(onClick = { showNameDialog = false }) { Text("Отмена") }
-        }
-    )
-}
 }
 
 private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
@@ -283,8 +283,13 @@ private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
 
 @Composable
 private fun CreatedCell(
-    data: CellData, isSelected: Boolean, isSwapTarget: Boolean,
-    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
+    data: CellData,
+    vm: AppViewModel,
+    isSelected: Boolean,
+    isSwapTarget: Boolean,
+    onClick: () -> Unit,
+    onDoubleTap: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val borderColor = when {
         isSelected -> Color(0xFF00C853)
@@ -311,13 +316,25 @@ private fun CreatedCell(
             }
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(data.title.ifBlank { "Без названия" }, maxLines = 1, style = MaterialTheme.typography.bodySmall)
+            Text(
+                data.title.ifBlank { "Без названия" },
+                maxLines = 1,
+                style = MaterialTheme.typography.bodySmall
+            )
             Spacer(Modifier.height(4.dp))
-            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp)).background(Color(0xFFCFD8DC))) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFCFD8DC))
+            ) {
                 data.imageFile?.let { f ->
                     AsyncImage(
-                        model = vm.repo.imageFile(f), contentDescription = null,
-                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                        model = vm.repo.imageFile(f),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
