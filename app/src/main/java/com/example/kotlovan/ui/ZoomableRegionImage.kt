@@ -80,8 +80,9 @@ fun ZoomableRegionImage(
 
         val bmp = withContext(Dispatchers.IO) {
             try { dec.decodeRegion(rect, BitmapFactory.Options().apply { inSampleSize = 1 }) }
-            catch (_: Exception) { null }
-        }
+            catch (e: kotlinx.coroutines.CancellationException) { null }
+			catch (_: Throwable) {null}
+		}
         hasLoadedTile = true
         if (bmp != null) {
             regionBitmap?.recycle()
@@ -119,9 +120,9 @@ fun ZoomableRegionImage(
 
     DisposableEffect(file) {
         onDispose {
-            baseBitmap?.recycle()
-            regionBitmap?.recycle()
-            decoder?.recycle()
+            try { baseBitmap?.recycle() } catch (_: Throwable) {}
+            try { regionBitmap?.recycle() } catch (_: Throwable) {}
+            decoder = null
         }
     }
 }

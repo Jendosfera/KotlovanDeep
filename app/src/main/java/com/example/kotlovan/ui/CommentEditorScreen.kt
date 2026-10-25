@@ -1,5 +1,13 @@
 package com.example.kotlovan.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -98,6 +106,46 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         }
         pendingPhotoName = null
     }
+
+	val ctx = LocalContext.current
+
+val takePictureLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.TakePicture()
+	) { success ->
+		val name = pendingPhotoName
+		if (success && name != null) {
+			photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+		} else if (!success && name != null) {
+			Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
+		}
+		pendingPhotoName = null
+	}
+
+	fun launchCameraActual() {
+		val name = vm.repo.newPhotoName()
+		pendingPhotoName = name
+		try {
+			val uri = vm.repo.photoUriForNew(name)
+			takePictureLauncher.launch(uri)
+		} catch (e: Exception) {
+			pendingPhotoName = null
+			Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+		}
+	}
+
+	val cameraPermissionLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.RequestPermission()
+	) { granted ->
+		if (granted) launchCameraActual()
+		else Toast.makeText(ctx, "Нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
+	}
+
+	fun launchCamera() {
+		val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
+				PackageManager.PERMISSION_GRANTED
+		if (granted) launchCameraActual()
+		else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+	}
 
     fun launchCamera() {
         val name = vm.repo.newPhotoName()

@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -206,7 +207,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             jumpToLink(pj, lr.commentRow, lr.commentCol, lr.commentId, keepReturn = true)
         }
 
-        LaunchedEffect(row, col, fitW, fitH, pendingJump) {
+        LaunchedEffect(row, col, fitW, fitH, pendingJump, vm.useAux) {
             val pj = pendingJump
             if (pj != null) {
                 scale = pj.scale
@@ -402,7 +403,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             persistViewport()
                             vm.useAux = !vm.useAux
                             val target = vm.active
-                            savedRow = target.lastRow; savedCol = target.lastCol
+                            savedRow = -1
+							savedCol = -1
                             row = target.lastRow; col = target.lastCol
                             pendingJump = null
                         },
@@ -549,7 +551,21 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         // ==== Установка комментария по центру ====
         if (subMode == ViewerSubMode.PLACE_COMMENT) {
-            BlinkingDot(modifier = Modifier.align(Alignment.Center))
+            Canvas(modifier = Modifier.align(Alignment.Center).size(48.dp)) {
+				val cx = size.width / 2
+				val cy = size.height / 2
+				val stroke = 2.dp.toPx()
+				val short = 8.dp.toPx()
+				val long = 20.dp.toPx()
+				// Горизонтальные штрихи
+				drawLine(Color.Black, Offset(cx - long, cy), Offset(cx - short, cy), stroke)
+				drawLine(Color.Black, Offset(cx + short, cy), Offset(cx + long, cy), stroke)
+				// Вертикальные
+				drawLine(Color.Black, Offset(cx, cy - long), Offset(cx, cy - short), stroke)
+				drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
+				// Центральная точка
+				drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
+}			
             OutlinedIconButton(
                 onClick = {
                     val cell = vm.cell(row, col)
