@@ -22,13 +22,13 @@ suspend fun PointerInputScope.detectViewerGestures(
     tapThreshold: Float = 20f,
     longPressMs: Long = 500,
     minScale: Float = 0.3f,
-    maxScale: Float = 12f,
-    consumeAll: Boolean = false   // ← новое
+    maxScale: Float = 12f
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         val downTime = System.currentTimeMillis()
         var isTransform = false
+        var didPan = false
         var startVp = Viewport(1f, Offset.Zero)
         var startDist = 1f
         var anchorX = 0f
@@ -38,8 +38,6 @@ suspend fun PointerInputScope.detectViewerGestures(
 
         do {
             val event = awaitPointerEvent()
-            if (consumeAll) event.changes.forEach { it.consume() }   // ← поглощаем для ZoomImage
-
             val pressed = event.changes.filter { it.pressed }
 
             if (pressed.size >= 2) {
@@ -47,7 +45,6 @@ suspend fun PointerInputScope.detectViewerGestures(
                 val p2 = pressed[1].position
                 val focal = (p1 + p2) / 2f
                 val dist = (p1 - p2).getDistance()
-
                 if (!isTransform) {
                     isTransform = true
                     startVp = getViewport()
@@ -65,12 +62,26 @@ suspend fun PointerInputScope.detectViewerGestures(
                 pressed.forEach { it.consume() }
             } else if (pressed.size == 1 && !isTransform) {
                 val ch = pressed[0]
-                sumDx += ch.positionChange().x
-                sumDy += ch.positionChange().y
+                val dx = ch.positionChange().x
+                val dy = ch.positionChange().y
+                val vp = getViewport()
+                if (vp.scale > 1.05f) {
+                    if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
+                        didPan = true
+                        var newOx = vp.offset.x + dx
+                        var newOy = vp.offset.y + dy
+                        newOx = newOx.coerceIn(containerW / 2f - fitW * vp.scale, containerW / 2f)
+                        newOy = newOy.coerceIn(containerH / 2f - fitH * vp.scale, containerH / 2f)
+                        onTransform(Viewport(vp.scale, Offset(newOx, newOy)))
+                    }
+                } else {
+                    sumDx += dx
+                    sumDy += dy
+                }
             }
         } while (event.changes.any { it.pressed })
 
-        if (!isTransform) {
+        if (!isTransform && !didPan) {
             val dist = sqrt(sumDx * sumDx + sumDy * sumDy)
             val elapsed = System.currentTimeMillis() - downTime
             if (dist < tapThreshold) {

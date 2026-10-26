@@ -31,10 +31,14 @@ data class CommentPin(
     val radius: Float,
     val title: String = "",
     val text: String = "",
-    val color: Long = 0xFFFF5722L,
+    val color: Long = 0xFFFFEB3B,             // жёлтый по умолчанию
     val iconType: CommentIconType = CommentIconType.CIRCLE,
     val link: PinLink? = null,
-    val photos: List<CommentPhoto> = emptyList()
+    val photos: List<CommentPhoto> = emptyList(),
+    val rating: Int = 0,
+    val shortLabel: String = "",
+    val strokeColor: Long = 0xFF1976D2,       // синяя кайма
+    val strokeRatio: Float = 0.25f            // толщина = 1/4 диаметра
 )
 
 @Serializable

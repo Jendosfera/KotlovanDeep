@@ -231,21 +231,26 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 ) { Text("Отменить перенос") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = { showNameDialog = true },
-                    modifier = Modifier.weight(1f).height(56.dp)
-                ) { Text("Сохранить массив") }
-                Button(
-                    onClick = {
-                        if (vm.active.cells.isNotEmpty()) {
-                            vm.autosave()
-                            nav.navigate("viewer")
-                        }
-                    },
-                    enabled = vm.active.cells.isNotEmpty(),
-                    modifier = Modifier.weight(1f).height(56.dp)
-                ) { Text("Просмотр") }
-            }
+				Button(
+					onClick = {
+						if (vm.active.cells.isNotEmpty()) {
+							vm.autosave()
+							nav.navigate("viewer")
+						}
+					},
+					enabled = vm.active.cells.isNotEmpty(),
+					modifier = Modifier.weight(1f).height(56.dp)
+				) { Text("Просмотр") }
+				Button(
+					onClick = { showNameDialog = true },
+					colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+						containerColor = Color(0xFF4CAF50),
+						contentColor = Color.White
+					),
+					border = androidx.compose.foundation.BorderStroke(7.dp, Color.Black),
+					modifier = Modifier.weight(1f).height(56.dp)
+				) { Text("Сохранить") }
+			}
         }
     }
 

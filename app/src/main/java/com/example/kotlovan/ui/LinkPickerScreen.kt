@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -146,10 +147,18 @@ fun LinkPickerScreen(
         }
 
         // Прицел
-        Box(
-            Modifier.align(Alignment.Center).size(24.dp)
-                .background(Color.Red.copy(alpha = 0.7f), shape = CircleShape)
-        )
+        Canvas(Modifier.align(Alignment.Center).size(48.dp)) {
+			val cx = size.width / 2
+			val cy = size.height / 2
+			val stroke = 2.dp.toPx()
+			val short = 8.dp.toPx()
+			val long = 20.dp.toPx()
+			drawLine(Color.Black, Offset(cx - long, cy), Offset(cx - short, cy), stroke)
+			drawLine(Color.Black, Offset(cx + short, cy), Offset(cx + long, cy), stroke)
+			drawLine(Color.Black, Offset(cx, cy - long), Offset(cx, cy - short), stroke)
+			drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
+			drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
+		}
 
         // Верхняя панель
         Row(
