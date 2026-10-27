@@ -551,48 +551,47 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }, icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp))
         }
-
+            
         // Контекстное меню
         contextMenu?.let { (pos, pins) ->
-            val menuWidthPx = with(density) { 220.dp.toPx() }
-            val closeRadiusPx = with(density) { 24.dp.toPx() }
-            val closeBtnSize = with(density) { 48.dp.toPx() }
-            // Красный круг с крестом
-            Box(
-                Modifier.offset { IntOffset((pos.x - closeRadiusPx).toInt(), (pos.y - closeRadiusPx).toInt()) }
-                    .size(with(density) { closeBtnSize.toDp() })
-                    .background(Color.Red, CircleShape)
-                    .border(7.dp, Color.Black, CircleShape)
-                    .clickable { contextMenu = null },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("×", color = Color.Black, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            }
-            // Меню (правый верхний угол касается точки нажатия)
+            val density2 = LocalDensity.current
+            val menuWidthPx = with(density2) { 220.dp.toPx() }
+            val closeRadiusPx = with(density2) { 24.dp.toPx() }
+            val closeBtnSize = with(density2) { 48.dp.toPx() }
+        
+            // Меню (под крестом)
             Column(
-                Modifier.offset { IntOffset((pos.x - menuWidthPx).toInt(), pos.y.toInt()) }
+                Modifier
+                    .offset { IntOffset((pos.x - menuWidthPx).toInt(), pos.y.toInt()) }
                     .width(220.dp)
                     .background(Color(0xFFFFEB3B), RoundedCornerShape(8.dp))
                     .border(7.dp, Color(0xFF1565C0), RoundedCornerShape(8.dp))
                     .padding(8.dp)
+                    .zIndex(1f)
             ) {
-                if (pins.isEmpty()) {
-                    Text("Нет комментариев", color = Color.Black)
-                } else {
-                    for (pin in pins) {
-                        Text(
-                            pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable {
-                                    nav.navigate("comment/$row/$col/${pin.id}")
-                                    contextMenu = null
-                                }
-                                .padding(vertical = 6.dp),
-                            color = Color.Black
-                        )
-                    }
+                if (pins.isEmpty()) Text("Нет комментариев", color = Color.Black)
+                else for (pin in pins) {
+                    Text(
+                        pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            nav.navigate("comment/$row/$col/${pin.id}")
+                            contextMenu = null
+                        }.padding(vertical = 6.dp),
+                        color = Color.Black
+                    )
                 }
             }
+            // Красный крест ПОВЕРХ меню
+            Box(
+                Modifier
+                    .offset { IntOffset((pos.x - closeRadiusPx).toInt(), (pos.y - closeRadiusPx).toInt()) }
+                    .size(with(density2) { closeBtnSize.toDp() })
+                    .background(Color.Red, CircleShape)
+                    .border(7.dp, Color.Black, CircleShape)
+                    .clickable { contextMenu = null }
+                    .zIndex(2f),
+                contentAlignment = Alignment.Center
+            ) { Text("×", color = Color.Black, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
         }
 
         if (showSettings && !iconsHidden) {
