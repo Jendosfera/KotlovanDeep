@@ -1,5 +1,9 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.ButtonDefaults
+
 import androidx.compose.ui.graphics.FilterQuality
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -201,27 +205,41 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = {
-                vm.autosave()
-                nav.popBackStack()
-            }) { Icon(Icons.Default.ArrowBack, "Назад") }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = {
-                if (aux) nav.navigate("builder?aux=false") {
-                    popUpTo("builder?aux=true") { inclusive = true }
-                }
-                else nav.navigate("builder?aux=true")
-            }) {
-                Icon(
-                    if (aux) Icons.Default.LockOpen else Icons.Default.Lock,
-                    if (aux) "Главный массив" else "Вспомогательный массив"
-                )
-            }
-        }
+		Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+		    // Синяя стрелка на жёлтом
+		    Box(
+		        Modifier.size(44.dp).clip(CircleShape)
+		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
+		            .clickable { vm.autosave(); nav.popBackStack() },
+		        contentAlignment = Alignment.Center
+		    ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Color(0xFF1565C0)) }
+		
+		    Spacer(Modifier.weight(1f))
+		
+		    // Синий замок на жёлтом кружке с чёрной каймой
+		    Box(
+		        Modifier.size(44.dp).clip(CircleShape)
+		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
+		            .clickable {
+		                if (aux) nav.navigate("builder?aux=false") { popUpTo("builder?aux=true") { inclusive = true } }
+		                else nav.navigate("builder?aux=true")
+		            },
+		        contentAlignment = Alignment.Center
+		    ) {
+		        Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив",
+		            tint = Color(0xFF1565C0))
+		    }
+		
+		    Spacer(Modifier.width(4.dp))
+		
+		    // Кнопка рейтинга
+		    Box(
+		        Modifier.size(44.dp).clip(CircleShape)
+		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
+		            .clickable { nav.navigate("rating") },
+		        contentAlignment = Alignment.Center
+		    ) { Icon(Icons.Default.Star, "Рейтинг", tint = Color(0xFF1565C0)) }
+		}
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
@@ -230,26 +248,25 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                 ) { Text("Отменить перенос") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-				Button(
-					onClick = {
-						if (vm.active.cells.isNotEmpty()) {
-							vm.autosave()
-							nav.navigate("viewer")
-						}
-					},
-					enabled = vm.active.cells.isNotEmpty(),
-					modifier = Modifier.weight(1f).height(56.dp)
-				) { Text("Просмотр") }
-				Button(
-					onClick = { showNameDialog = true },
-					colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-						containerColor = Color(0xFF4CAF50),
-						contentColor = Color.White
-					),
-					border = androidx.compose.foundation.BorderStroke(7.dp, Color.Black),
-					modifier = Modifier.weight(1f).height(56.dp)
-				) { Text("Сохранить") }
+			Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+			    // Просмотр — жёлтый, чёрная кайма
+			    Button(
+			        onClick = {
+			            if (vm.active.cells.isNotEmpty()) { vm.autosave(); nav.navigate("viewer") }
+			        },
+			        enabled = vm.active.cells.isNotEmpty(),
+			        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEB3B), contentColor = Color.Black),
+			        border = BorderStroke(7.dp, Color.Black),
+			        modifier = Modifier.weight(1f).height(56.dp)
+			    ) { Text("Просмотр") }
+			
+			    // Сохранить — зелёный, чёрная кайма
+			    Button(
+			        onClick = { showNameDialog = true },
+			        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
+			        border = BorderStroke(7.dp, Color.Black),
+			        modifier = Modifier.weight(1f).height(56.dp)
+			    ) { Text("Сохранить") }
 			}
         }
     }
