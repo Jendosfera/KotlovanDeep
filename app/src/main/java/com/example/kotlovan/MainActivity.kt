@@ -1,5 +1,6 @@
 package com.example.kotlovan
 
+import com.example.kotlovan.ui.RatingTableScreen
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -40,6 +41,8 @@ fun RootNav() {
             composable("menu") { MainMenuScreen(nav, vm) }
             composable("settings") { SettingsScreen(nav, vm) }
 
+            composable("rating") { RatingTableScreen(nav, vm) }
+            
             composable(
                 route = "builder?aux={aux}",
                 arguments = listOf(navArgument("aux") {
