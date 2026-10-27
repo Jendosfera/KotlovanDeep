@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -37,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
@@ -63,10 +65,11 @@ fun LinkPickerScreen(
     comCol: Int,
     commentId: String
 ) {
-    // Сохраняем исходный массив при входе, восстанавливаем при выходе
     val originalUseAux = remember { vm.useAux }
     DisposableEffect(Unit) {
-        onDispose { vm.useAux = originalUseAux }
+        onDispose {
+            try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+        }
     }
 
     var row by remember { mutableIntStateOf(vm.active.lastRow) }
@@ -74,6 +77,21 @@ fun LinkPickerScreen(
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+
+    // Если стартовой ячейки нет — берём первую доступную
+    LaunchedEffect(vm.useAux) {
+        if (vm.cell(row, col) == null) {
+            val cells = vm.active.cells.keys
+            if (cells.isNotEmpty()) {
+                val k = cells.first()
+                val p = k.split(",")
+                row = p.getOrNull(0)?.toIntOrNull() ?: 0
+                col = p.getOrNull(1)?.toIntOrNull() ?: 0
+            } else {
+                row = 0; col = 0
+            }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val containerW = constraints.maxWidth.toFloat()
@@ -83,18 +101,22 @@ fun LinkPickerScreen(
         val currentCell = vm.cell(row, col)
         val imageW = currentCell?.imageWidth ?: 0
         val imageH = currentCell?.imageHeight ?: 0
-        val fitScale = if (imageW > 0 && imageH > 0) min(containerW / imageW, containerH / imageH) else 1f
+        val fitScale = if (imageW > 0 && imageH > 0)
+            min(containerW / imageW, containerH / imageH) else 1f
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
-        val allRows = vm.active.cells.keys.map { it.substringBefore(',').toInt() }
-        val allCols = vm.active.cells.keys.map { it.substringAfter(',').toInt() }
+        val allRows = vm.active.cells.keys.mapNotNull { it.substringBefore(',').toIntOrNull() }
+        val allCols = vm.active.cells.keys.mapNotNull { it.substringAfter(',').toIntOrNull() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
 
         LaunchedEffect(row, col, fitW, fitH, vm.useAux) {
-            val c = vm.cell(row, col) ?: return@LaunchedEffect
-            scale = if (c.ownPosition) c.ownScale else vm.active.globalScale
+            val c = vm.cell(row, col) ?: run {
+                scale = 1f; offsetX = 0f; offsetY = 0f
+                return@LaunchedEffect
+            }
+            scale = if (c.ownPosition) c.ownScale.coerceAtLeast(0.3f) else vm.active.globalScale.coerceAtLeast(0.3f)
             val vOx = if (c.ownPosition) c.ownOffsetX else vm.active.globalOffsetX
             val vOy = if (c.ownPosition) c.ownOffsetY else vm.active.globalOffsetY
             offsetX = containerW / 2f + vOx - c.commonX * fitW * scale
@@ -102,9 +124,7 @@ fun LinkPickerScreen(
         }
 
         Box(
-            Modifier
-                .fillMaxSize()
-                .clipToBounds()
+            Modifier.fillMaxSize().clipToBounds()
                 .pointerInput(row, col, fitW, fitH, vm.useAux) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
@@ -132,41 +152,38 @@ fun LinkPickerScreen(
             if (currentCell != null && imgFile != null && imageW > 0 && imageH > 0) {
                 ZoomableRegionImage(
                     file = vm.repo.imageFile(imgFile),
-                    imageW = imageW,
-                    imageH = imageH,
-                    containerW = containerW,
-                    containerH = containerH,
-                    scale = scale,
-                    offsetX = offsetX,
-                    offsetY = offsetY,
-                    fitW = fitW,
-                    fitH = fitH,
+                    imageW = imageW, imageH = imageH,
+                    containerW = containerW, containerH = containerH,
+                    scale = scale, offsetX = offsetX, offsetY = offsetY,
+                    fitW = fitW, fitH = fitH,
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
 
-        // Прицел
+        // Чёрный прицел
         Canvas(Modifier.align(Alignment.Center).size(48.dp)) {
-			val cx = size.width / 2
-			val cy = size.height / 2
-			val stroke = 2.dp.toPx()
-			val short = 8.dp.toPx()
-			val long = 20.dp.toPx()
-			drawLine(Color.Black, Offset(cx - long, cy), Offset(cx - short, cy), stroke)
-			drawLine(Color.Black, Offset(cx + short, cy), Offset(cx + long, cy), stroke)
-			drawLine(Color.Black, Offset(cx, cy - long), Offset(cx, cy - short), stroke)
-			drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
-			drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
-		}
+            val cx = size.width / 2
+            val cy = size.height / 2
+            val stroke = 2.dp.toPx()
+            val short = 8.dp.toPx()
+            val long = 20.dp.toPx()
+            drawLine(Color.Black, Offset(cx - long, cy), Offset(cx - short, cy), stroke)
+            drawLine(Color.Black, Offset(cx + short, cy), Offset(cx + long, cy), stroke)
+            drawLine(Color.Black, Offset(cx, cy - long), Offset(cx, cy - short), stroke)
+            drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
+            drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
+        }
 
-        // Верхняя панель
         Row(
             Modifier.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedIconButton(
-                onClick = { nav.popBackStack() },
+                onClick = {
+                    try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+                    nav.popBackStack()
+                },
                 icon = Icons.Default.ArrowBack,
                 description = "Назад"
             )
@@ -177,57 +194,63 @@ fun LinkPickerScreen(
                 onClick = {
                     vm.useAux = !vm.useAux
                     val t = vm.active
-                    row = t.lastRow
-                    col = t.lastCol
+                    if (t.cell(t.lastRow, t.lastCol) != null) {
+                        row = t.lastRow; col = t.lastCol
+                    } else if (t.cells.isNotEmpty()) {
+                        val k = t.cells.keys.first()
+                        val p = k.split(",")
+                        row = p.getOrNull(0)?.toIntOrNull() ?: 0
+                        col = p.getOrNull(1)?.toIntOrNull() ?: 0
+                    } else {
+                        row = 0; col = 0
+                    }
                 },
                 icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
-                description = if (vm.useAux) "Главный" else "Вспомогательный"
+                description = "Массив"
             )
         }
 
-        // Кнопки строк (слева)
         Column(
-            Modifier
-                .align(Alignment.CenterStart)
+            Modifier.align(Alignment.CenterStart)
                 .padding(start = 4.dp, top = 60.dp, bottom = 100.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (r in rowRange) {
+                val has = vm.cell(r, col) != null
                 SideButton(
                     text = vm.active.rowLabels[r] ?: "R${r + 1}",
-                    selected = (r == row),
-                    onClick = {
-                        if (vm.cell(r, col) != null) { row = r }
-                    }
+                    selected = (r == row), dimmed = !has,
+                    onClick = { if (has) row = r }
                 )
             }
         }
 
-        // Кнопки столбцов (снизу)
         Row(
-            Modifier
-                .align(Alignment.BottomCenter)
+            Modifier.align(Alignment.BottomCenter)
                 .padding(start = 60.dp, end = 8.dp, bottom = 12.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (c in colRange) {
+                val has = vm.cell(row, c) != null
                 SideButton(
                     text = vm.active.colLabels[c] ?: "C${c + 1}",
-                    selected = (c == col),
-                    onClick = {
-                        if (vm.cell(row, c) != null) { col = c }
-                    }
+                    selected = (c == col), dimmed = !has,
+                    onClick = { if (has) col = c }
                 )
             }
         }
 
-        // Подтверждение
         OutlinedIconButton(
             onClick = {
-                val imgX = (containerW / 2f - offsetX) / scale
-                val imgY = (containerH / 2f - offsetY) / scale
+                val cell = vm.cell(row, col)
+                if (cell == null || imageW <= 0 || imageH <= 0) {
+                    nav.popBackStack()
+                    return@OutlinedIconButton
+                }
+                val imgX = (containerW / 2f - offsetX) / scale.coerceAtLeast(0.01f)
+                val imgY = (containerH / 2f - offsetY) / scale.coerceAtLeast(0.01f)
                 val nx = (imgX / fitW).coerceIn(0f, 1f)
                 val ny = (imgY / fitH).coerceIn(0f, 1f)
                 val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
@@ -236,27 +259,32 @@ fun LinkPickerScreen(
                 nav.popBackStack()
             },
             icon = Icons.Default.Check,
-            description = "Подтвердить",
+            description = "OK",
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
         )
     }
 }
 
 @Composable
-private fun SideButton(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun SideButton(
+    text: String, selected: Boolean, dimmed: Boolean = false,
+    onClick: () -> Unit
+) {
+    val baseScale = if (dimmed) 0.8f else 1f
     Box(
         Modifier
             .size(width = 52.dp, height = 40.dp)
-            .scale(if (selected) 1.15f else 1f)
+            .scale(if (selected) 1.15f else baseScale)
+            .alpha(if (dimmed) 0.5f else 1f)
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) Color(0xFF1565C0) else Color.Black.copy(alpha = 0.5f))
-            .clickable(onClick = onClick),
+            .clickable(enabled = !dimmed, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text, color = Color.White, maxLines = 1,
             overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
     }
@@ -270,7 +298,8 @@ private fun OutlinedIconButton(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
+        modifier = modifier.size(44.dp).clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.45f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) { Icon(icon, description, tint = Color.White) }
