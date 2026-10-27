@@ -350,9 +350,16 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 val sy = pin.y * fitH * scale + offsetY
                                 sx in 0f..containerW && sy in 0f..containerH
                             }
-                            if (visible.isNotEmpty() || cell.comments.isNotEmpty()) {
-                                contextMenu = pos to cell.comments
-                            }
+                            val rowPins = if (showAllRow) {
+                                val extra = mutableListOf<CommentPin>()
+                                for (c in colRange) {
+                                    if (c == col) continue
+                                    val oc = vm.cell(row, c) ?: continue
+                                    extra += oc.comments
+                                }
+                                visible + extra
+                            } else visible
+                            if (rowPins.isNotEmpty()) contextMenu = pos to rowPins
                         }
                     )
                 }
