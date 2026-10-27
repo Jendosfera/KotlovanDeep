@@ -1,18 +1,14 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.foundation.border
-
-import androidx.compose.ui.graphics.FilterQuality
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,20 +20,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +68,8 @@ import com.example.kotlovan.vm.AppViewModel
 
 private const val CELL_SIZE = 160f
 private const val CELL_GAP = 24f
+private val Yellow = Color(0xFFFFEB3B)
+private val Blue = Color(0xFF1565C0)
 
 @Composable
 fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
@@ -82,7 +83,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var initialized by remember(aux) { mutableStateOf(false) }
-
     var showNameDialog by remember { mutableStateOf(false) }
     var fileName by remember { mutableStateOf("array.zip") }
 
@@ -97,9 +97,8 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                     uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            if (vm.save(uri)) {
-                Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-            } else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+            if (vm.save(uri)) Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -116,10 +115,8 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
             }
         }
-        val minR = bounds[0]; val maxR = bounds[1]
-        val minC = bounds[2]; val maxC = bounds[3]
-        val rFrom = minR - 1; val rTo = maxR + 1
-        val cFrom = minC - 1; val cTo = maxC + 1
+        val rFrom = bounds[0] - 1; val rTo = bounds[1] + 1
+        val cFrom = bounds[2] - 1; val cTo = bounds[3] + 1
 
         val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
@@ -129,18 +126,15 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
 
         LaunchedEffect(Unit) {
             if (!initialized) {
-                val targetRow = vm.active.lastRow
-                val targetCol = vm.active.lastCol
-                val cx = (targetCol - cFrom) * step + cellSizePx / 2f
-                val cy = (targetRow - rFrom) * step + cellSizePx / 2f
+                val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
+                val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
                 offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
                 initialized = true
             }
         }
 
         Box(
-            Modifier
-                .fillMaxSize()
+            Modifier.fillMaxSize()
                 .pointerInput(totalW, totalH, containerW, containerH) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, offset) },
@@ -153,13 +147,11 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 }
         ) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0f)
-                        translationX = offset.x; translationY = offset.y
-                        scaleX = scale; scaleY = scale
-                    }
+                Modifier.fillMaxSize().graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    translationX = offset.x; translationY = offset.y
+                    scaleX = scale; scaleY = scale
+                }
             ) {
                 for (r in rFrom..rTo) for (c in cFrom..cTo) {
                     val data = vm.cell(r, c)
@@ -170,14 +162,12 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                     val isSelected = data != null && vm.active.lastRow == r && vm.active.lastCol == c
 
                     Box(
-                        Modifier
-                            .graphicsLayer { translationX = xPx; translationY = yPx }
+                        Modifier.graphicsLayer { translationX = xPx; translationY = yPx }
                             .size(CELL_SIZE.dp)
                     ) {
                         when {
                             data != null -> CreatedCell(
-                                data = data,
-                                vm = vm,
+                                data = data, vm = vm,
                                 isSelected = isSelected,
                                 isSwapTarget = longPressMode && selectedForSwap != null &&
                                         (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
@@ -188,9 +178,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                                             vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
                                             selectedForSwap = null; longPressMode = false
                                         }
-                                    } else {
-                                        vm.updateLastCell(r, c)
-                                    }
+                                    } else vm.updateLastCell(r, c)
                                 },
                                 onDoubleTap = { nav.navigate("card/$r/$c") },
                                 onLongPress = {
@@ -206,70 +194,67 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             }
         }
 
-		Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-		    // Синяя стрелка на жёлтом
-		    Box(
-		        Modifier.size(44.dp).clip(CircleShape)
-		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
-		            .clickable { vm.autosave(); nav.popBackStack() },
-		        contentAlignment = Alignment.Center
-		    ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Color(0xFF1565C0)) }
-		
-		    Spacer(Modifier.weight(1f))
-		
-		    // Синий замок на жёлтом кружке с чёрной каймой
-		    Box(
-		        Modifier.size(44.dp).clip(CircleShape)
-		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
-		            .clickable {
-		                if (aux) nav.navigate("builder?aux=false") { popUpTo("builder?aux=true") { inclusive = true } }
-		                else nav.navigate("builder?aux=true")
-		            },
-		        contentAlignment = Alignment.Center
-		    ) {
-		        Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив",
-		            tint = Color(0xFF1565C0))
-		    }
-		
-		    Spacer(Modifier.width(4.dp))
-		
-		    // Кнопка рейтинга
-		    Box(
-		        Modifier.size(44.dp).clip(CircleShape)
-		            .background(Color(0xFFFFEB3B)).border(7.dp, Color.Black, CircleShape)
-		            .clickable { nav.navigate("rating") },
-		        contentAlignment = Alignment.Center
-		    ) { Icon(Icons.Default.Star, "Рейтинг", tint = Color(0xFF1565C0)) }
-		}
+        // Верхняя панель
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Синяя стрелка на жёлтом с чёрной каймой
+            Box(
+                Modifier.size(44.dp).clip(CircleShape)
+                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                    .clickable { vm.autosave(); nav.popBackStack() },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Blue) }
 
+            Spacer(Modifier.weight(1f))
+
+            // Синий замок на жёлтом кружке с чёрной каймой
+            Box(
+                Modifier.size(44.dp).clip(CircleShape)
+                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                    .clickable {
+                        if (aux) nav.navigate("builder?aux=false") {
+                            popUpTo("builder?aux=true") { inclusive = true }
+                        } else nav.navigate("builder?aux=true")
+                    },
+                contentAlignment = Alignment.Center
+            ) { Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив", tint = Blue) }
+
+            Spacer(Modifier.width(4.dp))
+
+            // Значок рейтинга
+            Box(
+                Modifier.size(44.dp).clip(CircleShape)
+                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                    .clickable { nav.navigate("rating") },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Default.Star, "Рейтинг", tint = Blue) }
+        }
+
+        // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
-				Button(
-				    onClick = { longPressMode = false; selectedForSwap = null },
-				    border = BorderStroke(7.dp, Color.Black),
-				    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-				) { Text("Отменить перенос") }
+                Button(
+                    onClick = { longPressMode = false; selectedForSwap = null },
+                    border = BorderStroke(7.dp, Color.Black),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                ) { Text("Отменить перенос") }
             }
-			Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-			    // Просмотр — жёлтый, чёрная кайма
-			    Button(
-			        onClick = {
-			            if (vm.active.cells.isNotEmpty()) { vm.autosave(); nav.navigate("viewer") }
-			        },
-			        enabled = vm.active.cells.isNotEmpty(),
-			        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEB3B), contentColor = Color.Black),
-			        border = BorderStroke(7.dp, Color.Black),
-			        modifier = Modifier.weight(1f).height(56.dp)
-			    ) { Text("Просмотр") }
-			
-			    // Сохранить — зелёный, чёрная кайма
-			    Button(
-			        onClick = { showNameDialog = true },
-			        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
-			        border = BorderStroke(7.dp, Color.Black),
-			        modifier = Modifier.weight(1f).height(56.dp)
-			    ) { Text("Сохранить") }
-			}
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        if (vm.active.cells.isNotEmpty()) { vm.autosave(); nav.navigate("viewer") }
+                    },
+                    enabled = vm.active.cells.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Color.Black),
+                    border = BorderStroke(7.dp, Color.Black),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) { Text("Просмотр") }
+                Button(
+                    onClick = { showNameDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
+                    border = BorderStroke(7.dp, Color.Black),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) { Text("Сохранить") }
+            }
         }
     }
 
@@ -279,10 +264,8 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             title = { Text("Название сохранения") },
             text = {
                 OutlinedTextField(
-                    value = fileName,
-                    onValueChange = { fileName = it },
-                    label = { Text("Имя файла") },
-                    singleLine = true
+                    value = fileName, onValueChange = { fileName = it },
+                    label = { Text("Имя файла") }, singleLine = true
                 )
             },
             confirmButton = {
@@ -292,29 +275,22 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                     saveLauncher.launch(name)
                 }) { Text("Сохранить") }
             },
-            dismissButton = {
-                TextButton(onClick = { showNameDialog = false }) { Text("Отмена") }
-            }
+            dismissButton = { TextButton(onClick = { showNameDialog = false }) { Text("Отмена") } }
         )
     }
 
     DisposableEffect(Unit) { onDispose { vm.autosave() } }
 }
 
-private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
-    return cells.containsKey("${r-1},$c") || cells.containsKey("${r+1},$c") ||
-           cells.containsKey("$r,${c-1}") || cells.containsKey("$r,${c+1}")
-}
+private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean =
+    cells.containsKey("${r-1},$c") || cells.containsKey("${r+1},$c") ||
+    cells.containsKey("$r,${c-1}") || cells.containsKey("$r,${c+1}")
 
 @Composable
 private fun CreatedCell(
-    data: CellData,
-    vm: AppViewModel,
-    isSelected: Boolean,
-    isSwapTarget: Boolean,
-    onClick: () -> Unit,
-    onDoubleTap: () -> Unit,
-    onLongPress: () -> Unit
+    data: CellData, vm: AppViewModel,
+    isSelected: Boolean, isSwapTarget: Boolean,
+    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
 ) {
     val borderColor = when {
         isSelected -> Color(0xFF00C853)
@@ -326,12 +302,8 @@ private fun CreatedCell(
         shape = shape,
         elevation = CardDefaults.cardElevation(6.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape)
-                else Modifier
-            )
+        modifier = Modifier.fillMaxSize()
+            .then(if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape) else Modifier)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = { onDoubleTap() },
@@ -341,27 +313,14 @@ private fun CreatedCell(
             }
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(
-                data.title.ifBlank { "Без названия" },
-                maxLines = 1,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(data.title.ifBlank { "Без названия" }, maxLines = 1,
+                style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFCFD8DC))
-            ) {
+            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFFCFD8DC))) {
                 data.imageFile?.let { f ->
-                    AsyncImage(
-                        model = vm.repo.imageFile(f),
-                        contentDescription = null,
-						filterQuality = FilterQuality.High,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -373,14 +332,13 @@ private fun PlusButton(onClick: () -> Unit) {
     Card(
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1565C0)),
+        colors = CardDefaults.cardColors(containerColor = Blue),
         modifier = Modifier.fillMaxSize()
             .border(7.dp, Color.Black, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Add, "Добавить", tint = Color(0xFFFFEB3B),
-                modifier = Modifier.size(72.dp))   // x3
+            Icon(Icons.Default.Add, "Добавить", tint = Yellow, modifier = Modifier.size(72.dp))
         }
     }
 }
