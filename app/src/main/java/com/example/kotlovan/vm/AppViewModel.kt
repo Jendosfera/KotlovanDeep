@@ -18,6 +18,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val repo = ArrayRepository(app)
 
+	var lastRatingRow by mutableStateOf(-1)
+	var hiddenRows by mutableStateOf(setOf<Int>())
+	var hiddenCols by mutableStateOf(setOf<Int>())
+
+	fun toggleRowVisibility(r: Int) {
+ 	   hiddenRows = if (r in hiddenRows) hiddenRows - r else hiddenRows + r
+	}
+	fun toggleColVisibility(c: Int) {
+	    hiddenCols = if (c in hiddenCols) hiddenCols - c else hiddenCols + c
+	}
+	
 	private val themeRepo = com.example.kotlovan.theme.ThemeRepository(app)
 
 	var themeProfile by mutableStateOf(themeRepo.load())
