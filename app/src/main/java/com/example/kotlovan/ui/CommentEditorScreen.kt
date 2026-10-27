@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,11 +36,14 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -84,7 +88,11 @@ import com.example.kotlovan.vm.AppViewModel
 import java.util.UUID
 import kotlin.math.min
 
-private val PresetColors: List<Long> = listOf(
+private val Yellow = Color(0xFFFFEB3B)
+private val Blue = Color(0xFF1565C0)
+private val BlackBorder = BorderStroke(7.dp, Color.Black)
+private val BlueBorder = BorderStroke(7.dp, Blue)
+private val PresetColors = listOf(
     0xFFFF5722L, 0xFFE91E63L, 0xFF9C27B0L, 0xFF3F51B5L, 0xFF2196F3L,
     0xFF00BCD4L, 0xFF009688L, 0xFF4CAF50L, 0xFFFFC107L, 0xFFFFEB3B
 )
@@ -112,46 +120,55 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         ActivityResultContracts.TakePicture()
     ) { success ->
         val name = pendingPhotoName
-        if (success && name != null) {
-            photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
-        } else if (!success && name != null) {
-            Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
-        }
+        if (success && name != null) photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+        else if (!success && name != null) Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
         pendingPhotoName = null
+    }
+
+    val pickPhotoLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val name = vm.repo.newPhotoName()
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    vm.repo.photoFile(name).outputStream().use { out -> input.copyTo(out) }
+                }
+                photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+            } catch (_: Exception) {
+                Toast.makeText(ctx, "Не удалось скопировать фото", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     fun launchCameraActual() {
         val name = vm.repo.newPhotoName()
         pendingPhotoName = name
         try {
-            val uri = vm.repo.photoUriForNew(name)
-            takePictureLauncher.launch(uri)
+            takePictureLauncher.launch(vm.repo.photoUriForNew(name))
         } catch (e: Exception) {
             pendingPhotoName = null
             Toast.makeText(ctx, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+    val cameraPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) launchCameraActual()
-        else Toast.makeText(ctx, "Нужно разрешение на камеру", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(ctx, "Нужно разрешение", Toast.LENGTH_SHORT).show()
     }
 
     fun launchCamera() {
-        val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED
-        if (granted) launchCameraActual()
-        else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED) launchCameraActual()
+        else cameraPermLauncher.launch(Manifest.permission.CAMERA)
     }
 
     fun save() {
         vm.setComments(row, col, cell.comments.map {
-            if (it.id == id) it.copy(
-                title = title, text = text, shortLabel = shortLabel,
-                color = color, iconType = iconType, photos = photos, rating = rating
-            ) else it
+            if (it.id == id) it.copy(title = title, text = text, shortLabel = shortLabel,
+                color = color, iconType = iconType, photos = photos, rating = rating) else it
         })
         vm.autosave()
         nav.popBackStack()
@@ -170,7 +187,7 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     }
 
     if (moving) {
-        MoveCommentOverlay(cell = cell, vm = vm, initialX = pin.x, initialY = pin.y,
+        MoveCommentOverlay(cell, vm, pin.x, pin.y,
             onCancel = { moving = false },
             onConfirm = { nx, ny ->
                 vm.setComments(row, col, cell.comments.map {
@@ -187,28 +204,50 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
                 IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Назад") }
                 Text("Комментарий", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { launchCamera() }) { Icon(Icons.Default.PhotoCamera, "Фото") }
                 IconButton(onClick = { showStyleDialog = true }) { Icon(Icons.Default.Mood, "Стиль") }
                 IconButton(onClick = { nav.navigate("linkpicker/$row/$col/$id") }) {
-                    Icon(Icons.Default.Link, "Ссылка", modifier = Modifier.size(28.dp),
+                    Icon(Icons.Default.Link, "Ссылка",
+                        modifier = Modifier.size(28.dp),
                         tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray)
                 }
                 IconButton(onClick = { moving = true }) { Icon(Icons.Default.GpsFixed, "Переместить") }
                 IconButton(onClick = { save() }) { Icon(Icons.Default.Save, "Сохранить") }
             }
             Spacer(Modifier.height(8.dp))
+
+            // Поля со стилем «жёлтый + синяя кайма»
+            YellowField(
+                value = title, onValueChange = { title = it }, label = "Название",
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = title, onValueChange = { title = it },
-                    label = { Text("Название") }, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(value = shortLabel,
+                YellowField(
+                    value = shortLabel,
                     onValueChange = { if (it.length <= 3) shortLabel = it },
-                    label = { Text("Метка") }, singleLine = true,
-                    modifier = Modifier.width(80.dp))
+                    label = "Метка", modifier = Modifier.weight(1f)
+                )
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = text, onValueChange = { text = it },
-                label = { Text("Текст") }, modifier = Modifier.fillMaxWidth().height(140.dp))
+            YellowField(
+                value = text, onValueChange = { text = it }, label = "Текст",
+                modifier = Modifier.fillMaxWidth().height(140.dp)
+            )
+
+            // Кнопки камера / галерея
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                YellowBigButton(
+                    onClick = { launchCamera() },
+                    icon = Icons.Default.PhotoCamera,
+                    modifier = Modifier.weight(1f)
+                )
+                YellowBigButton(
+                    onClick = { pickPhotoLauncher.launch(arrayOf("image/*")) },
+                    icon = Icons.Default.Image,
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
             if (photos.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
@@ -222,7 +261,8 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
                                 model = vm.repo.photoFile(photo.file),
                                 contentDescription = photo.title,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(80.dp).clip(RoundedCornerShape(8.dp))
+                                modifier = Modifier.size(80.dp)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(Color(0xFFECEFF1))
                                     .pointerInput(photo.id) {
                                         detectTapGestures(
@@ -240,7 +280,6 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
             Spacer(Modifier.height(80.dp))
         }
 
-        // Удаление (низ-лево)
         IconButton(
             onClick = {
                 vm.setComments(row, col, cell.comments.filterNot { it.id == id })
@@ -249,15 +288,12 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
         ) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
 
-        // Рейтинг (низ-право)
-        Row(
-            Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { rating++ }) { Icon(Icons.Default.ArrowUpward, "Повысить", tint = Color(0xFF1976D2)) }
+        Row(Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { rating++ }) { Icon(Icons.Default.ArrowUpward, "↑", tint = Blue) }
             Text("$rating", style = MaterialTheme.typography.titleLarge)
             IconButton(onClick = { if (rating > -999) rating-- }) {
-                Icon(Icons.Default.ArrowDownward, "Понизить", tint = Color(0xFFD32F2F))
+                Icon(Icons.Default.ArrowDownward, "↓", tint = Color(0xFFD32F2F))
             }
         }
     }
@@ -366,6 +402,43 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
 }
 
 @Composable
+private fun YellowField(
+    value: String, onValueChange: (String) -> Unit,
+    label: String, modifier: Modifier = Modifier
+) {
+    Box(
+        modifier
+            .background(Yellow, RoundedCornerShape(8.dp))
+            .border(BlueBorder, RoundedCornerShape(8.dp))
+            .padding(4.dp)
+    ) {
+        OutlinedTextField(
+            value = value, onValueChange = onValueChange,
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun YellowBigButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
+        border = BorderStroke(7.dp, Blue),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.height(64.dp)
+    ) {
+        Icon(icon, null, modifier = Modifier.size(32.dp))
+    }
+}
+
+@Composable
 private fun IconTypeCell(type: CommentIconType, selected: Boolean, color: Color, onClick: () -> Unit) {
     Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp))
         .background(if (selected) Color(0xFFE0E0E0) else Color.White)
@@ -384,7 +457,6 @@ private fun MoveCommentOverlay(
 ) {
     var mScale by remember { mutableFloatStateOf(1f) }
     var mOffset by remember { mutableStateOf(Offset.Zero) }
-
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         val containerW = constraints.maxWidth.toFloat()
         val containerH = constraints.maxHeight.toFloat()
@@ -399,7 +471,6 @@ private fun MoveCommentOverlay(
             mScale = 1f
             mOffset = Offset(containerW / 2f - initialX * fitW, containerH / 2f - initialY * fitH)
         }
-
         Box(Modifier.fillMaxSize().clipToBounds()
             .pointerInput(fitW, fitH) {
                 detectViewerGestures(
@@ -407,13 +478,11 @@ private fun MoveCommentOverlay(
                     fitW = fitW, fitH = fitH,
                     containerW = containerW, containerH = containerH,
                     onTransform = { vp -> mScale = vp.scale; mOffset = vp.offset },
-                    onSwipe = { _, _ -> }
-                )
+                    onSwipe = { _, _ -> })
             }) {
             val f = cell.imageFile
             if (f != null) {
-                AsyncImage(
-                    model = vm.repo.imageFile(f), contentDescription = null,
+                AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.size(with(density) { fitW.toDp() }, with(density) { fitH.toDp() })
                         .graphicsLayer {
@@ -423,7 +492,6 @@ private fun MoveCommentOverlay(
                         })
             }
         }
-
         Canvas(Modifier.align(Alignment.Center).size(48.dp)) {
             val cx = size.width / 2
             val cy = size.height / 2
@@ -436,18 +504,13 @@ private fun MoveCommentOverlay(
             drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
             drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
         }
-
         IconButton(onClick = onCancel, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
             Icon(Icons.Default.ArrowBack, "Отмена", tint = Color.White)
         }
         IconButton(onClick = {
-            val cx = containerW / 2f
-            val cy = containerH / 2f
-            val imgX = (cx - mOffset.x) / mScale
-            val imgY = (cy - mOffset.y) / mScale
-            val nx = (imgX / fitW).coerceIn(0f, 1f)
-            val ny = (imgY / fitH).coerceIn(0f, 1f)
-            onConfirm(nx, ny)
+            val imgX = (containerW / 2f - mOffset.x) / mScale.coerceAtLeast(0.01f)
+            val imgY = (containerH / 2f - mOffset.y) / mScale.coerceAtLeast(0.01f)
+            onConfirm((imgX / fitW).coerceIn(0f, 1f), (imgY / fitH).coerceIn(0f, 1f))
         }, modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
             Icon(Icons.Default.Check, "OK", tint = Color.White)
         }
