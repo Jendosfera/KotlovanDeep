@@ -285,13 +285,18 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
                         fitW = fitW, fitH = fitH,
                         containerW = containerW, containerH = containerH,
-                        onTransform = { vp -> scale = vp.scale; offsetX = vp.offset.x; offsetY = vp.offset.y },
+                        onTransform = { vp ->
+                            scale = vp.scale
+                            offsetX = vp.offset.x
+                            offsetY = vp.offset.y
+                        },
                         onSwipe = { dx, dy ->
                             if (inLinkMode) {
                                 returnFromLink()
                             } else if (subMode == ViewerSubMode.VIEW) {
                                 val dir: SwipeDir
-                                var nr = row; var nc = col
+                                var nr = row
+                                var nc = col
                                 if (abs(dx) > abs(dy)) {
                                     if (dx < 0) {
                                         dir = SwipeDir.LEFT
@@ -330,18 +335,20 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         onTap = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
                             val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
-                            if (inCorner) { iconsHidden = !iconsHidden; return@detectViewerGestures }
+                            if (inCorner) {
+                                iconsHidden = !iconsHidden
+                                return@detectViewerGestures
+                            }
                             val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
                             if (hit != null) {
                                 val (hr, hc, pin) = hit
                                 if (pin.link != null) {
                                     jumpToLink(pin.link, hr, hc, pin.id)
                                 } else {
-                                    // Редактирование любого пина, включая чужие ячейки строки
                                     nav.navigate("comment/$hr/$hc/${pin.id}")
                                 }
                             }
-                        }
+                        },
                         onLongPress = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
                             val cell = vm.cell(row, col) ?: return@detectViewerGestures
