@@ -3,6 +3,7 @@ package com.example.kotlovan.ui
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.border
 
 import androidx.compose.ui.graphics.FilterQuality
 import android.widget.Toast
@@ -373,10 +374,13 @@ private fun PlusButton(onClick: () -> Unit) {
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(6.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1565C0)),
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick)
+        modifier = Modifier.fillMaxSize()
+            .border(7.dp, Color.Black, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Add, "Добавить", tint = Color.White)
+            Icon(Icons.Default.Add, "Добавить", tint = Color(0xFFFFEB3B),
+                modifier = Modifier.size(72.dp))   // x3
         }
     }
 }
