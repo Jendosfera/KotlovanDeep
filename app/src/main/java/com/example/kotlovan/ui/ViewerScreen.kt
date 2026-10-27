@@ -335,13 +335,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 val (hr, hc, pin) = hit
                                 if (pin.link != null) {
                                     jumpToLink(pin.link, hr, hc, pin.id)
-                                } else if (hr == row && hc == col) {
-                                    val now = System.currentTimeMillis()
-                                    visibleTitles = if (pin.id in visibleTitles && (visibleTitles[pin.id] ?: 0L) > now)
-                                        visibleTitles - pin.id else visibleTitles + (pin.id to (now + 5000L))
+                                } else {
+                                    // Редактирование любого пина, включая чужие ячейки строки
+                                    nav.navigate("comment/$hr/$hc/${pin.id}")
                                 }
                             }
-                        },
+                        }
                         onLongPress = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
                             val cell = vm.cell(row, col) ?: return@detectViewerGestures
