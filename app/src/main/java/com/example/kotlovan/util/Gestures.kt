@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.positionChange
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -20,26 +21,43 @@ suspend fun PointerInputScope.detectViewerGestures(
     onLongPress: (Offset) -> Unit = {},
     swipeThreshold: Float = 80f,
     tapThreshold: Float = 20f,
-    longPressMs: Long = 500,
+    longPressMs: Long = 1000L,
     minScale: Float = 0.3f,
     maxScale: Float = 12f
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        val downTime = System.currentTimeMillis()
+        val startTime = System.currentTimeMillis()
         var isTransform = false
         var didPan = false
+        var longPressFired = false
         var startVp = Viewport(1f, Offset.Zero)
         var startDist = 1f
         var anchorX = 0f
         var anchorY = 0f
         var sumDx = 0f
         var sumDy = 0f
+        var active = true
 
-        do {
-            val event = awaitPointerEvent()
+        while (active) {
+            val elapsed = System.currentTimeMillis() - startTime
+            val remaining = longPressMs - elapsed
+            // Ждём следующего события или таймаута
+            val timeout = if (!longPressFired && !isTransform && !didPan)
+                remaining.coerceAtLeast(1L) else Long.MAX_VALUE
+
+            val event = withTimeoutOrNull(timeout) { awaitPointerEvent() }
+
+            if (event == null) {
+                // Таймаут — long press без отпускания
+                if (!longPressFired && !isTransform && !didPan) {
+                    longPressFired = true
+                    onLongPress(down.position)
+                }
+                continue
+            }
+
             val pressed = event.changes.filter { it.pressed }
-
             if (pressed.size >= 2) {
                 val p1 = pressed[0].position
                 val p2 = pressed[1].position
@@ -55,8 +73,8 @@ suspend fun PointerInputScope.detectViewerGestures(
                     val newScale = (startVp.scale * (dist / startDist)).coerceIn(minScale, maxScale)
                     var newOx = focal.x - anchorX * newScale
                     var newOy = focal.y - anchorY * newScale
-                    newOx = newOx.coerceIn(containerW / 2f - fitW * newScale, containerW / 2f)
-                    newOy = newOy.coerceIn(containerH / 2f - fitH * newScale, containerH / 2f)
+                    if (fitW > 0f) newOx = newOx.coerceIn(containerW / 2f - fitW * newScale, containerW / 2f)
+                    if (fitH > 0f) newOy = newOy.coerceIn(containerH / 2f - fitH * newScale, containerH / 2f)
                     onTransform(Viewport(newScale, Offset(newOx, newOy)))
                 }
                 pressed.forEach { it.consume() }
@@ -70,8 +88,8 @@ suspend fun PointerInputScope.detectViewerGestures(
                         didPan = true
                         var newOx = vp.offset.x + dx
                         var newOy = vp.offset.y + dy
-                        newOx = newOx.coerceIn(containerW / 2f - fitW * vp.scale, containerW / 2f)
-                        newOy = newOy.coerceIn(containerH / 2f - fitH * vp.scale, containerH / 2f)
+                        if (fitW > 0f) newOx = newOx.coerceIn(containerW / 2f - fitW * vp.scale, containerW / 2f)
+                        if (fitH > 0f) newOy = newOy.coerceIn(containerH / 2f - fitH * vp.scale, containerH / 2f)
                         onTransform(Viewport(vp.scale, Offset(newOx, newOy)))
                     }
                 } else {
@@ -79,17 +97,15 @@ suspend fun PointerInputScope.detectViewerGestures(
                     sumDy += dy
                 }
             }
-        } while (event.changes.any { it.pressed })
 
-        if (!isTransform && !didPan) {
+            if (event.changes.none { it.pressed }) active = false
+        }
+
+        if (!isTransform && !didPan && !longPressFired) {
             val dist = sqrt(sumDx * sumDx + sumDy * sumDy)
-            val elapsed = System.currentTimeMillis() - downTime
-            if (dist < tapThreshold) {
-                if (elapsed < longPressMs) onTap(down.position)
-                else onLongPress(down.position)
-            } else if (abs(sumDx) > swipeThreshold || abs(sumDy) > swipeThreshold) {
+            if (dist < tapThreshold) onTap(down.position)
+            else if (abs(sumDx) > swipeThreshold || abs(sumDy) > swipeThreshold)
                 onSwipe(sumDx, sumDy)
-            }
         }
     }
 }
