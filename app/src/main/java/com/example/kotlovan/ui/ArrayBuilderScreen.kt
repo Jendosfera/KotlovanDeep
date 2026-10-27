@@ -243,10 +243,11 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
             if (longPressMode) {
-                Button(
-                    onClick = { longPressMode = false; selectedForSwap = null },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                ) { Text("Отменить перенос") }
+				Button(
+				    onClick = { longPressMode = false; selectedForSwap = null },
+				    border = BorderStroke(7.dp, Color.Black),
+				    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+				) { Text("Отменить перенос") }
             }
 			Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
 			    // Просмотр — жёлтый, чёрная кайма
