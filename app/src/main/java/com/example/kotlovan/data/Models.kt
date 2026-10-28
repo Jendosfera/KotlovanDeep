@@ -56,7 +56,9 @@ data class CellData(
     val commonY: Float = 0.5f,
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
-    val ownOffsetY: Float = 0f
+    val ownOffsetY: Float = 0f,
+    val nestedImageFile: String? = null,
+    val nestedTitle: String = ""
 )
 
 @Serializable
@@ -80,7 +82,9 @@ data class ArrayConfig(
     val main: SubArray = SubArray(),
     val aux: SubArray = SubArray(),
     val iconSize: Float = 1f,
-    val iconOpacity: Float = 1f
+    val iconOpacity: Float = 1f,
+    val photoArchive: SubArray = SubArray(),
+    val photoModeActive: Boolean = false
 )
 
 @Serializable
