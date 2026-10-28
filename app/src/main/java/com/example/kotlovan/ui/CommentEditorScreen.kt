@@ -255,10 +255,12 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color(0xFFECEFF1))
                                     .pointerInput(photo.id) {
-                                        detectTapGestures(
-                                            onDoubleTap = { viewPhoto = photo },
-                                            onLongPress = { editPhoto = photo })
-                                    })
+										detectTapGestures(
+											onTap = { /* однократный тап — открыть просмотр */ viewPhoto = photo },
+											onDoubleTap = { /* двойной — редактирование */ editPhoto = photo },
+											onLongPress = { editPhoto = photo }
+										)
+									})
                             if (photo.title.isNotBlank()) {
                                 Text(photo.title, style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1, modifier = Modifier.width(80.dp).padding(top = 2.dp))

@@ -76,7 +76,11 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
 
-    LaunchedEffect(aux) { vm.useAux = aux }
+    LaunchedEffect(aux) { 
+		val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
+		val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
+		offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
+	}
 
     var scale by remember(aux) { mutableStateOf(1f) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }
@@ -187,7 +191,17 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                                     Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                                 }
                             )
-                            isPlus || isEmptyStart -> PlusButton { nav.navigate("card/$r/$c") }
+                            isPlus || isEmptyStart -> PlusButton(
+								onClick = {
+									if (longPressMode && selectedForSwap != null) {
+										vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
+										selectedForSwap = null
+										longPressMode = false
+									} else if (!longPressMode) {
+										nav.navigate("card/$r/$c")
+									}
+								}
+							)
                         }
                     }
                 }

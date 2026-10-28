@@ -120,6 +120,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var contextMenu by remember { mutableStateOf<Pair<Offset, List<CommentPin>>?>(null) }
     var pendingJump by remember { mutableStateOf<PendingJump?>(null) }
     var visibleTitles by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+	var lastTapTime by remember { mutableStateOf(0L) }
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
@@ -333,23 +334,30 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 }
                             }
                         },
-                        onTap = { pos ->
-                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-                            val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
-                            if (inCorner) {
-                                iconsHidden = !iconsHidden
-                                return@detectViewerGestures
-                            }
-                            val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
-                            if (hit != null) {
-                                val (hr, hc, pin) = hit
-                                if (pin.link != null) {
-                                    jumpToLink(pin.link, hr, hc, pin.id)
-                                } else {
-                                    nav.navigate("comment/$hr/$hc/${pin.id}")
-                                }
-                            }
-                        },
+						onTap = { pos ->
+							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+							val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
+							if (inCorner) { iconsHidden = !iconsHidden; return@detectViewerGestures }
+							val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
+							if (hit != null) {
+								val (hr, hc, pin) = hit
+								val now = System.currentTimeMillis()
+								if (now - lastTapTime < 350L) {
+									// двойной тап — редактор
+									if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
+									else nav.navigate("comment/$hr/$hc/${pin.id}")
+									lastTapTime = 0L
+									return@detectViewerGestures
+								}
+								lastTapTime = now
+								if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
+								else {
+									val vnow = System.currentTimeMillis()
+									visibleTitles = if (pin.id in visibleTitles && (visibleTitles[pin.id] ?: 0L) > vnow)
+										visibleTitles - pin.id else visibleTitles + (pin.id to (vnow + 5000L))
+								}
+							}
+						},
                         onLongPress = { pos ->
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
                             val cell = vm.cell(row, col) ?: return@detectViewerGestures
