@@ -242,10 +242,11 @@ fun LinkPickerScreen(
             }
         }
 
-        OutlinedIconButton(
+           OutlinedIconButton(
             onClick = {
                 val cell = vm.cell(row, col)
                 if (cell == null || imageW <= 0 || imageH <= 0) {
+                    vm.useAux = originalUseAux
                     nav.popBackStack()
                     return@OutlinedIconButton
                 }
@@ -256,6 +257,9 @@ fun LinkPickerScreen(
                 val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
                 vm.setCommentLink(comRow, comCol, commentId, newLink)
                 if (vm.linkReturn != null) vm.pendingRejump = newLink
+                // КРИТИЧНО: вернуть массив до popBackStack, иначе CommentEditorScreen
+                // увидит vm.cell(comRow,comCol) == null и покажет белый экран
+                vm.useAux = originalUseAux
                 nav.popBackStack()
             },
             icon = Icons.Default.Check,
