@@ -43,16 +43,17 @@ fun RootNav() {
 
             composable("rating") { RatingTableScreen(nav, vm) }
             
-            composable(
-                route = "builder?aux={aux}",
-                arguments = listOf(navArgument("aux") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                })
-            ) { back ->
-                val aux = back.arguments?.getBoolean("aux") ?: false
-                ArrayBuilderScreen(nav, vm, aux)
-            }
+			composable(
+				route = "builder?aux={aux}&selectForNested={selectForNested}",
+				arguments = listOf(
+					navArgument("aux") { type = NavType.BoolType; defaultValue = false },
+					navArgument("selectForNested") { type = NavType.StringType; defaultValue = "" }
+				)
+			) { back ->
+				val aux = back.arguments?.getBoolean("aux") ?: false
+				val selectForNested = back.arguments?.getString("selectForNested") ?: ""
+				ArrayBuilderScreen(nav, vm, aux, selectForNested)
+			}
 
             composable("card/{row}/{col}") { back ->
                 val row = back.arguments?.getString("row")?.toIntOrNull() ?: 0

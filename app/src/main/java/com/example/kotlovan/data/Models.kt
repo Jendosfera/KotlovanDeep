@@ -44,9 +44,7 @@ data class CommentPin(
 @Serializable
 data class CellData(
     val title: String = "",
-    /** Имя файла в filesDir/cell_images/ — используется в ZIP-формате. */
     val imageFile: String? = null,
-    /** Устаревшее поле — только для чтения старых JSON; при normalize мигрируется в imageFile. */
     val imageUri: String? = null,
     val imageWidth: Int = 0,
     val imageHeight: Int = 0,
@@ -57,8 +55,13 @@ data class CellData(
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
     val ownOffsetY: Float = 0f,
-    val nestedImageFile: String? = null,
-    val nestedTitle: String = ""
+    // === Вложенные ячейки ===
+    val parentRow: Int = -1,              // если я подложка — координаты главной
+    val parentCol: Int = -1,
+    val nestedImageFile: String? = null,  // если у меня есть подложка — её image
+    val nestedTitle: String = "",
+    val nestedRow: Int = -1,              // координаты подложки
+    val nestedCol: Int = -1
 )
 
 @Serializable

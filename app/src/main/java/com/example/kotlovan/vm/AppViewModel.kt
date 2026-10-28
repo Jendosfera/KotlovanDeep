@@ -181,6 +181,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             })
         }
     }
+	
+	fun makeNested(sourceRow: Int, sourceCol: Int, targetRow: Int, targetCol: Int) {
+		if (sourceRow == targetRow && sourceCol == targetCol) return
+		val src = cell(sourceRow, sourceCol) ?: return
+		val tgt = cell(targetRow, targetCol) ?: return
+
+		// Сначала снимаем старое вложение target, если было
+		if (tgt.nestedRow >= 0 && tgt.nestedCol >= 0) {
+			updateCell(tgt.nestedRow, tgt.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
+		}
+		// Снимаем parent у source, если она уже была чьей-то подложкой
+		if (src.parentRow >= 0 && src.parentCol >= 0) {
+			updateCell(src.parentRow, src.parentCol) {
+				it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
+			}
+		}
+
+		updateCell(sourceRow, sourceCol) { it.copy(parentRow = targetRow, parentCol = targetCol) }
+		updateCell(targetRow, targetCol) {
+			it.copy(
+				nestedImageFile = src.imageFile,
+				nestedTitle = src.title,
+				nestedRow = sourceRow,
+				nestedCol = sourceCol
+			)
+		}
+		autosave()
+	}
+
+	fun removeNested(row: Int, col: Int) {
+		val c = cell(row, col) ?: return
+		if (c.nestedRow >= 0 && c.nestedCol >= 0) {
+			updateCell(c.nestedRow, c.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
+		}
+		if (c.parentRow >= 0 && c.parentCol >= 0) {
+			updateCell(c.parentRow, c.parentCol) {
+				it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
+			}
+		}
+		updateCell(row, col) {
+			it.copy(
+				parentRow = -1, parentCol = -1,
+				nestedImageFile = null, nestedTitle = "",
+				nestedRow = -1, nestedCol = -1
+			)
+		}
+		autosave()
+	}	
 
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)

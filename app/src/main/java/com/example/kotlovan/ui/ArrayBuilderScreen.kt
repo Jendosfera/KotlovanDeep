@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,7 +71,18 @@ private val Yellow = Color(0xFFFFEB3B)
 private val Blue = Color(0xFF1565C0)
 
 @Composable
-fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
+fun ArrayBuilderScreen(
+    nav: NavHostController,
+    vm: AppViewModel,
+    aux: Boolean,
+    selectForNested: String = ""
+) {
+    // Парсим selectForNested = "row,col"
+    val nestedParts = selectForNested.split(",")
+    val nestedRow = nestedParts.getOrNull(0)?.toIntOrNull() ?: -1
+    val nestedCol = nestedParts.getOrNull(1)?.toIntOrNull() ?: -1
+    val isSelectMode = nestedRow >= 0 && nestedCol >= 0
+
     val ctx = LocalContext.current
     val density = LocalDensity.current
 
@@ -123,7 +135,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
         val totalW = (cTo - cFrom + 1) * step - cellGapPx
         val totalH = (rTo - rFrom + 1) * step - cellGapPx
 
-        // Центрирование на текущей ячейке при смене массива
         LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol) {
             val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
             val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
@@ -131,8 +142,7 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
         }
 
         Box(
-            Modifier
-                .fillMaxSize()
+            Modifier.fillMaxSize()
                 .pointerInput(totalW, totalH, containerW, containerH) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, offset) },
@@ -145,15 +155,11 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 }
         ) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0f)
-                        translationX = offset.x
-                        translationY = offset.y
-                        scaleX = scale
-                        scaleY = scale
-                    }
+                Modifier.fillMaxSize().graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    translationX = offset.x; translationY = offset.y
+                    scaleX = scale; scaleY = scale
+                }
             ) {
                 for (r in rFrom..rTo) for (c in cFrom..cTo) {
                     val data = vm.cell(r, c)
@@ -165,42 +171,61 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                             vm.active.lastRow == r && vm.active.lastCol == c
 
                     Box(
-                        Modifier
-                            .graphicsLayer { translationX = xPx; translationY = yPx }
+                        Modifier.graphicsLayer { translationX = xPx; translationY = yPx }
                             .size(CELL_SIZE.dp)
                     ) {
                         when {
                             data != null -> CreatedCell(
-                                data = data,
-                                vm = vm,
+                                data = data, vm = vm,
                                 isSelected = isSelected,
                                 isSwapTarget = longPressMode && selectedForSwap != null &&
                                         (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
+                                isSelectMode = isSelectMode,
+                                isSource = (r == nestedRow && c == nestedCol),
+                                onOpenNested = {
+                                    if (data.nestedRow >= 0 && data.nestedCol >= 0) {
+                                        nav.navigate("card/${data.nestedRow}/${data.nestedCol}")
+                                    }
+                                },
+                                onNestedLongPress = {
+                                    if (data.nestedRow >= 0 && data.nestedCol >= 0) {
+                                        longPressMode = true
+                                        selectedForSwap = data.nestedRow to data.nestedCol
+                                        Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
                                 onClick = {
-                                    if (longPressMode) {
+                                    if (isSelectMode) {
+                                        if (r != nestedRow || c != nestedCol) {
+                                            vm.makeNested(nestedRow, nestedCol, r, c)
+                                            nav.popBackStack()
+                                        }
+                                    } else if (longPressMode) {
                                         if (selectedForSwap == null) selectedForSwap = r to c
                                         else {
                                             vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-                                            selectedForSwap = null
-                                            longPressMode = false
+                                            selectedForSwap = null; longPressMode = false
                                         }
-                                    } else {
-                                        vm.updateLastCell(r, c)
-                                    }
+                                    } else vm.updateLastCell(r, c)
                                 },
-                                onDoubleTap = { nav.navigate("card/$r/$c") },
+                                onDoubleTap = {
+                                    if (!isSelectMode && !longPressMode) nav.navigate("card/$r/$c")
+                                },
                                 onLongPress = {
-                                    longPressMode = true
-                                    selectedForSwap = r to c
-                                    Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
+                                    if (!isSelectMode) {
+                                        longPressMode = true
+                                        selectedForSwap = r to c
+                                        Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             )
                             isPlus || isEmptyStart -> PlusButton(
                                 onClick = {
-                                    if (longPressMode && selectedForSwap != null) {
+                                    if (isSelectMode) {
+                                        // Нельзя вложить в пустую — игнорируем
+                                    } else if (longPressMode && selectedForSwap != null) {
                                         vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-                                        selectedForSwap = null
-                                        longPressMode = false
+                                        selectedForSwap = null; longPressMode = false
                                     } else if (!longPressMode) {
                                         nav.navigate("card/$r/$c")
                                     }
@@ -213,65 +238,73 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
         }
 
         // Верхняя панель
-        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).clip(CircleShape)
-                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
-                    .clickable { vm.autosave(); nav.popBackStack() },
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Blue) }
-
-            Spacer(Modifier.weight(1f))
-
-            Box(
-                Modifier.size(44.dp).clip(CircleShape)
-                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
-                    .clickable {
-                        if (aux) nav.navigate("builder?aux=false") {
-                            popUpTo("builder?aux=true") { inclusive = true }
-                        } else nav.navigate("builder?aux=true")
-                    },
-                contentAlignment = Alignment.Center
-            ) { Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив", tint = Blue) }
-
-            Spacer(Modifier.width(4.dp))
-
-            Box(
-                Modifier.size(44.dp).clip(CircleShape)
-                    .background(Yellow).border(7.dp, Color.Black, CircleShape)
-                    .clickable { nav.navigate("rating") },
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Default.Star, "Рейтинг", tint = Blue) }
+        if (!isSelectMode) {
+            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                        .clickable { vm.autosave(); nav.popBackStack() },
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Blue) }
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                        .clickable {
+                            if (aux) nav.navigate("builder?aux=false") {
+                                popUpTo("builder?aux=true") { inclusive = true }
+                            } else nav.navigate("builder?aux=true")
+                        },
+                    contentAlignment = Alignment.Center
+                ) { Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив", tint = Blue) }
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(Yellow).border(7.dp, Color.Black, CircleShape)
+                        .clickable { nav.navigate("rating") },
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Default.Star, "Рейтинг", tint = Blue) }
+            }
         }
 
         // Нижняя панель
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp)) {
-            if (longPressMode) {
+            if (isSelectMode) {
                 Button(
-                    onClick = { longPressMode = false; selectedForSwap = null },
+                    onClick = { nav.popBackStack() },
                     border = BorderStroke(7.dp, Color.Black),
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                ) { Text("Отменить перенос") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = {
-                        if (vm.active.cells.isNotEmpty()) {
-                            vm.autosave()
-                            nav.navigate("viewer")
-                        }
-                    },
-                    enabled = vm.active.cells.isNotEmpty(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Color.Black),
-                    border = BorderStroke(7.dp, Color.Black),
-                    modifier = Modifier.weight(1f).height(56.dp)
-                ) { Text("Просмотр") }
-                Button(
-                    onClick = { showNameDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
-                    border = BorderStroke(7.dp, Color.Black),
-                    modifier = Modifier.weight(1f).height(56.dp)
-                ) { Text("Сохранить") }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFCDD2), contentColor = Color.Black
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) { Text("Отменить вложение") }
+            } else {
+                if (longPressMode) {
+                    Button(
+                        onClick = { longPressMode = false; selectedForSwap = null },
+                        border = BorderStroke(7.dp, Color.Black),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                    ) { Text("Отменить перенос") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            if (vm.active.cells.isNotEmpty()) {
+                                vm.autosave(); nav.navigate("viewer")
+                            }
+                        },
+                        enabled = vm.active.cells.isNotEmpty(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Color.Black),
+                        border = BorderStroke(7.dp, Color.Black),
+                        modifier = Modifier.weight(1f).height(56.dp)
+                    ) { Text("Просмотр") }
+                    Button(
+                        onClick = { showNameDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50), contentColor = Color.White),
+                        border = BorderStroke(7.dp, Color.Black),
+                        modifier = Modifier.weight(1f).height(56.dp)
+                    ) { Text("Сохранить") }
+                }
             }
         }
     }
@@ -310,55 +343,106 @@ private fun CreatedCell(
     vm: AppViewModel,
     isSelected: Boolean,
     isSwapTarget: Boolean,
+    isSelectMode: Boolean,
+    isSource: Boolean,
+    onOpenNested: () -> Unit,
+    onNestedLongPress: () -> Unit,
     onClick: () -> Unit,
     onDoubleTap: () -> Unit,
     onLongPress: () -> Unit
 ) {
     val borderColor = when {
+        isSource && isSelectMode -> Color(0xFF9E9E9E)
         isSelected -> Color(0xFF00C853)
         isSwapTarget -> Color(0xFFFFE082)
         else -> Color.Transparent
     }
     val shape = RoundedCornerShape(12.dp)
-    Card(
-        shape = shape,
-        elevation = CardDefaults.cardElevation(6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier
-            .fillMaxSize()
-            .then(
-                if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape)
-                else Modifier
-            )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = { onDoubleTap() },
-                    onLongPress = { onLongPress() },
-                    onTap = { onClick() }
-                )
-            }
-    ) {
-        Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(
-                data.title.ifBlank { "Без названия" },
-                maxLines = 1,
-                style = MaterialTheme.typography.bodySmall
-            )
-            Spacer(Modifier.height(4.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFFCFD8DC))
+    val density = LocalDensity.current
+    val titleH = 24.dp
+
+    Box(Modifier.fillMaxSize()) {
+        // ==== Подложка ====
+        if (data.nestedImageFile != null || data.nestedTitle.isNotBlank()) {
+            Card(
+                shape = shape,
+                elevation = CardDefaults.cardElevation(3.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4)),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .offset(x = titleH, y = -titleH)
+                    .pointerInput(data.nestedRow, data.nestedCol) {
+                        detectTapGestures(
+                            onDoubleTap = { onOpenNested() },
+                            onLongPress = { onNestedLongPress() }
+                        )
+                    }
             ) {
-                data.imageFile?.let { f ->
-                    AsyncImage(
-                        model = vm.repo.imageFile(f),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                Column(Modifier.fillMaxSize().padding(4.dp)) {
+                    Text(
+                        data.nestedTitle.ifBlank { "Подложка" },
+                        maxLines = 1,
+                        style = MaterialTheme.typography.labelSmall
                     )
+                    Spacer(Modifier.height(2.dp))
+                    Box(
+                        Modifier.fillMaxWidth().weight(1f)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFE0E0E0))
+                    ) {
+                        data.nestedImageFile?.let { f ->
+                            AsyncImage(
+                                model = vm.repo.imageFile(f),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==== Главная карта ====
+        Card(
+            shape = shape,
+            elevation = CardDefaults.cardElevation(6.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (isSelected || isSwapTarget || (isSource && isSelectMode))
+                        Modifier.border(3.dp, borderColor, shape)
+                    else Modifier
+                )
+                .pointerInput(isSelectMode, isSource) {
+                    detectTapGestures(
+                        onDoubleTap = { onDoubleTap() },
+                        onLongPress = { onLongPress() },
+                        onTap = { onClick() }
+                    )
+                }
+        ) {
+            Column(Modifier.fillMaxSize().padding(6.dp)) {
+                Text(
+                    data.title.ifBlank { "Без названия" },
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    Modifier.fillMaxWidth().weight(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFCFD8DC))
+                ) {
+                    data.imageFile?.let { f ->
+                        AsyncImage(
+                            model = vm.repo.imageFile(f),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
             }
         }
@@ -371,8 +455,7 @@ private fun PlusButton(onClick: () -> Unit) {
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(6.dp),
         colors = CardDefaults.cardColors(containerColor = Blue),
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
             .border(7.dp, Color.Black, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {

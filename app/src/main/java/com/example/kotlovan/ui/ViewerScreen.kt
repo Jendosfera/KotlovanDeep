@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.zIndex
 import androidx.compose.animation.AnimatedContent
@@ -426,18 +427,34 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 Spacer(Modifier.weight(1f))
                 OutlinedIconButton(onClick = { flashlight.toggle() },
                     icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod)
-                if (!inLinkMode) {
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedIconButton(onClick = {
-                        persistViewport()
-                        vm.useAux = !vm.useAux
-                        val target = vm.active
-                        savedRow = -1; savedCol = -1
-                        row = target.lastRow; col = target.lastCol
-                        pendingJump = null
-                    }, icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
-                        description = "Массив", iconModifier = iconMod)
-                }
+				if (!inLinkMode) {
+					val hasNestedInfo = (currentCell?.nestedRow ?: -1) >= 0
+					val isNestedItself = (currentCell?.parentRow ?: -1) >= 0
+					if (hasNestedInfo || isNestedItself) {
+						Spacer(Modifier.width(4.dp))
+						Box(
+							Modifier.size(44.dp).clip(CircleShape)
+								.background(Color(0xFFFFEB3B))
+								.border(5.dp, Color(0xFF1565C0), CircleShape)
+								.clickable {
+									persistViewport()
+									savedRow = -1
+									savedCol = -1
+									if (hasNestedInfo) {
+										row = currentCell!!.nestedRow
+										col = currentCell!!.nestedCol
+									} else if (isNestedItself) {
+										row = currentCell!!.parentRow
+										col = currentCell!!.parentCol
+									}
+									pendingJump = null
+								},
+							contentAlignment = Alignment.Center
+						) {
+							Icon(Icons.Default.Layers, "Вложение", tint = Color(0xFF1565C0))
+						}
+					}
+				}
                 Spacer(Modifier.width(4.dp))
                 Box {
                     OutlinedIconButton(onClick = { menuOpen = !menuOpen },
