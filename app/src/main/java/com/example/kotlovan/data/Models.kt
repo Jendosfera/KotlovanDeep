@@ -39,6 +39,7 @@ data class CommentPin(
     val shortLabel: String = "",
     val strokeColor: Long = 0xFF1976D2,       // синяя кайма
     val strokeRatio: Float = 0.25f            // толщина = 1/4 диаметра
+	val createdAt: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -84,10 +85,9 @@ data class ArrayConfig(
     val name: String = "Массив",
     val main: SubArray = SubArray(),
     val aux: SubArray = SubArray(),
+    val photoArchive: SubArray = SubArray(),   // ← новое
     val iconSize: Float = 1f,
-    val iconOpacity: Float = 1f,
-    val photoArchive: SubArray = SubArray(),
-    val photoModeActive: Boolean = false
+    val iconOpacity: Float = 1f
 )
 
 @Serializable

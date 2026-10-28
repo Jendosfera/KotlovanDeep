@@ -98,7 +98,7 @@ private val PresetColors = listOf(
 )
 
 @Composable
-fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int, id: String) {
+fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int, id: String,autoCamera: Boolean = false) {
     val cell = vm.cell(row, col) ?: return
     val pin = cell.comments.firstOrNull { it.id == id } ?: return
     val ctx = LocalContext.current
@@ -164,6 +164,11 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
             PackageManager.PERMISSION_GRANTED) launchCameraActual()
         else cameraPermLauncher.launch(Manifest.permission.CAMERA)
     }
+	LaunchedEffect(Unit) {
+		if (autoCamera) {
+			launchCamera()
+		}
+	}
 
     fun save() {
         vm.setComments(row, col, cell.comments.map {

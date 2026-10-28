@@ -51,6 +51,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var useAux by mutableStateOf(false)
+	var photoModeActive by mutableStateOf(false)
     var linkReturn by mutableStateOf<LinkReturnState?>(null)
     var pendingRejump by mutableStateOf<PinLink?>(null)
 
@@ -58,7 +59,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var pendingReconnect by mutableStateOf(emptyList<Pair<Int, Int>>())
         private set
 
-    val active: SubArray get() = if (useAux) config.aux else config.main
+    val active: SubArray
+		get() = when {
+			photoModeActive -> config.photoArchive
+			useAux -> config.aux
+			else -> config.main
+		}
 
     init {
         repo.loadAutosave()?.let { config = normalize(it) }
@@ -95,7 +101,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        collect(config.main); collect(config.aux)
+        collect(config.main); collect(config.aux);collect(config.photoArchive)
         pendingReconnect = missing
         hasUnsavedChanges = false
         return true
@@ -236,10 +242,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun updateActive(transform: (SubArray) -> SubArray) {
-        config = if (useAux) config.copy(aux = transform(config.aux))
-                 else config.copy(main = transform(config.main))
-        hasUnsavedChanges = true
-    }
+		config = when {
+			photoModeActive -> config.copy(photoArchive = transform(config.photoArchive))
+			useAux -> config.copy(aux = transform(config.aux))
+			else -> config.copy(main = transform(config.main))
+		}
+		hasUnsavedChanges = true
+	}
 
     /** Миграция imageUri -> imageFile + подтягивание размеров. */
     private fun normalize(src: ArrayConfig): ArrayConfig {
@@ -265,6 +274,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         )
-        return src.copy(main = fixSub(src.main), aux = fixSub(src.aux))
+        return src.copy(main = fixSub(src.main), aux = fixSub(src.aux), photoArchive = fixSub(src.photoArchive))
     }
+	
+	fun savePhotoArchive(uri: Uri): Boolean =
+		repo.saveSubArrayAsZip(config.photoArchive, uri).also { if (it) hasUnsavedChanges = false }
+
+	fun loadPhotoArchive(uri: Uri): Boolean {
+		val loaded = repo.loadSubArrayFromZip(uri) ?: return false
+		config = config.copy(photoArchive = loaded)
+		hasUnsavedChanges = false
+		return true
+	}
+
+	fun generatePhotoReport(
+		selectedPins: Set<String>, from: Long, to: Long, uri: Uri
+	): Boolean = repo.generatePhotoReport(config.photoArchive, selectedPins, from, to, uri)
 }

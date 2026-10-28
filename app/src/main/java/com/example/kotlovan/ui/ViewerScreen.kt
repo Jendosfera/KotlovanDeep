@@ -1,5 +1,11 @@
 package com.example.kotlovan.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.zIndex
@@ -127,7 +133,32 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     val flashlight = remember { Flashlight(ctx) }
 
     val inLinkMode = vm.linkReturn != null
+	
+	val saveArchiveLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.CreateDocument("application/zip")
+	) { uri ->
+		if (uri != null) {
+			try {
+				ctx.contentResolver.takePersistableUriPermission(
+					uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+				)
+			} catch (_: Exception) {}
+			if (vm.savePhotoArchive(uri))
+				Toast.makeText(ctx, "Архив сохранён", Toast.LENGTH_SHORT).show()
+			else Toast.makeText(ctx, "Ошибка", Toast.LENGTH_SHORT).show()
+		}
+	}
 
+	val openArchiveLauncher = rememberLauncherForActivityResult(
+		ActivityResultContracts.OpenDocument()
+	) { uri ->
+		if (uri != null) {
+			if (vm.loadPhotoArchive(uri))
+				Toast.makeText(ctx, "Архив загружен", Toast.LENGTH_SHORT).show()
+			else Toast.makeText(ctx, "Ошибка загрузки", Toast.LENGTH_SHORT).show()
+		}
+	}	
+	
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
@@ -202,7 +233,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             jumpToLink(pj, lr.commentRow, lr.commentCol, lr.commentId, keepReturn = true)
         }
 
-        LaunchedEffect(row, col, fitW, fitH, pendingJump, vm.useAux) {
+        LaunchedEffect(row, col, fitW, fitH, pendingJump, vm.useAux, vm.photoModeActive) {
             val pj = pendingJump
             if (pj != null) {
                 scale = pj.scale
@@ -360,24 +391,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 							}
 						},
                         onLongPress = { pos ->
-                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-                            val cell = vm.cell(row, col) ?: return@detectViewerGestures
-                            val visible = cell.comments.filter { pin ->
-                                val sx = pin.x * fitW * scale + offsetX
-                                val sy = pin.y * fitH * scale + offsetY
-                                sx in 0f..containerW && sy in 0f..containerH
-                            }
-                            val rowPins = if (showAllRow) {
-                                val extra = mutableListOf<CommentPin>()
-                                for (c in colRange) {
-                                    if (c == col) continue
-                                    val oc = vm.cell(row, c) ?: continue
-                                    extra += oc.comments
-                                }
-                                visible + extra
-                            } else visible
-                            if (rowPins.isNotEmpty()) contextMenu = pos to rowPins
-                        }
+							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+							if (vm.photoModeActive) {
+								// В режиме фотофиксации — меню архива
+								contextMenu = pos to emptyList()
+								return@detectViewerGestures
+							}
+							val cell = vm.cell(row, col) ?: return@detectViewerGestures
+							...
+						}
                     )
                 }
         )
@@ -427,6 +449,26 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 Spacer(Modifier.weight(1f))
                 OutlinedIconButton(onClick = { flashlight.toggle() },
                     icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod)
+										// Иконка фотофиксации
+					if (!inLinkMode) {
+						Spacer(Modifier.width(4.dp))
+						val iconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
+						val tint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
+						Box(
+							Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
+								.clickable {
+									vm.photoModeActive = !vm.photoModeActive
+									savedRow = -1; savedCol = -1
+									val t = vm.active
+									row = t.lastRow; col = t.lastCol
+									pendingJump = null
+								},
+							contentAlignment = Alignment.Center
+						) {
+							Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = tint,
+								modifier = Modifier.size(iconSize).alpha(cfg.iconOpacity))
+						}
+					}
 				if (!inLinkMode) {
 					val hasNestedInfo = (currentCell?.nestedRow ?: -1) >= 0
 					val isNestedItself = (currentCell?.parentRow ?: -1) >= 0
@@ -507,6 +549,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         SideButton(
                             text = vm.active.rowLabels[r] ?: "R${r + 1}",
                             selected = (r == row), dimmed = isEmpty,
+							selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0),
                             onClick = { if (!isEmpty) { persistViewport(); row = r } },
                             onLongClick = { labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" }
                         )
@@ -523,6 +566,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         SideButton(
                             text = vm.active.colLabels[c] ?: "C${c + 1}",
                             selected = (c == col), dimmed = isEmpty,
+							selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0),
                             onClick = { if (!isEmpty) { persistViewport(); col = c } },
                             onLongClick = { labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" }
                         )
@@ -580,7 +624,11 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     val pin = CommentPin(id = id, x = nx, y = ny, radius = rad)
                     vm.setComments(row, col, cell.comments + pin)
                     subMode = ViewerSubMode.VIEW
-                    nav.navigate("comment/$row/$col/$id")
+                    if (vm.photoModeActive) {
+						nav.navigate("comment/$row/$col/$id?autoCamera=true")
+					} else {
+						nav.navigate("comment/$row/$col/$id")
+					}
                 }
             }, icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp))
@@ -595,6 +643,21 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         
             // Меню (под крестом)
             Column(
+				if (vm.photoModeActive && pins.isEmpty()) {
+					Text("Сохранить архив", Modifier.fillMaxWidth().clickable {
+						contextMenu = null
+						saveArchiveLauncher.launch("Общий архив.zip")
+					}.padding(vertical = 8.dp), color = Color.Black)
+					Text("Загрузить архив", Modifier.fillMaxWidth().clickable {
+						contextMenu = null
+						openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+					}.padding(vertical = 8.dp), color = Color.Black)
+					Text("Создать фотоотчёт", Modifier.fillMaxWidth().clickable {
+						contextMenu = null
+						nav.navigate("photoreport")
+					}.padding(vertical = 8.dp), color = Color.Black)
+					return@let
+				}
                 Modifier
                     .offset { IntOffset((pos.x - menuWidthPx).toInt(), pos.y.toInt()) }
                     .width(220.dp)
@@ -727,6 +790,7 @@ private fun CrosshairBlack(modifier: Modifier = Modifier) {
 @Composable
 private fun SideButton(
     text: String, selected: Boolean, dimmed: Boolean = false,
+	selectedColor: Color = Color(0xFF1565C0),
     onClick: () -> Unit, onLongClick: () -> Unit
 ) {
     val baseSize = if (dimmed) 0.8f else 1f
@@ -736,7 +800,11 @@ private fun SideButton(
             .scale(if (selected) 1.15f else baseSize)
             .alpha(if (dimmed) 0.5f else 1f)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Color(0xFF1565C0) else Color.Black.copy(alpha = 0.5f))
+            .background(
+				if (selected) selectedColor else Color.Black.copy(alpha = 0.5f) {
+					if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0)
+				} else Color.Black.copy(alpha = 0.5f)
+			)
             .pointerInput(text, selected, dimmed) {
                 detectTapGestures(onTap = { onClick() }, onLongPress = { onLongClick() })
             },

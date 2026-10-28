@@ -1,5 +1,6 @@
 package com.example.kotlovan
 
+import com.example.kotlovan.ui.PhotoReportScreen
 import com.example.kotlovan.ui.RatingTableScreen
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -63,12 +64,23 @@ fun RootNav() {
 
             composable("viewer") { ViewerScreen(nav, vm) }
 
-            composable("comment/{row}/{col}/{id}") { back ->
-                val row = back.arguments?.getString("row")?.toIntOrNull() ?: 0
-                val col = back.arguments?.getString("col")?.toIntOrNull() ?: 0
-                val id = back.arguments?.getString("id") ?: ""
-                CommentEditorScreen(nav, vm, row, col, id)
-            }
+			composable(
+				route = "comment/{row}/{col}/{id}?autoCamera={autoCamera}",
+				arguments = listOf(
+					navArgument("row") { type = NavType.IntType },
+					navArgument("col") { type = NavType.IntType },
+					navArgument("id") { type = NavType.StringType },
+					navArgument("autoCamera") { type = NavType.BoolType; defaultValue = false }
+				)
+			) { back ->
+				val row = back.arguments?.getInt("row") ?: 0
+				val col = back.arguments?.getInt("col") ?: 0
+				val id = back.arguments?.getString("id") ?: ""
+				val autoCamera = back.arguments?.getBoolean("autoCamera") ?: false
+				CommentEditorScreen(nav, vm, row, col, id, autoCamera)
+			}
+			
+			composable("photoreport") { PhotoReportScreen(nav, vm) }
 
             composable("linkpicker/{row}/{col}/{id}") { back ->
                 val row = back.arguments?.getString("row")?.toIntOrNull() ?: 0
