@@ -328,24 +328,50 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
     viewPhoto?.let { photo ->
         var pScale by remember(photo.id) { mutableFloatStateOf(1f) }
         var pOffset by remember(photo.id) { mutableStateOf(Offset.Zero) }
+        // Реальные размеры фото
+        var photoW by remember(photo.id) { mutableIntStateOf(0) }
+        var photoH by remember(photo.id) { mutableIntStateOf(0) }
+        LaunchedEffect(photo.id) {
+            val f = vm.repo.photoFile(photo.file)
+            val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
+            photoW = opts.outWidth
+            photoH = opts.outHeight
+        }
         Dialog(onDismissRequest = { viewPhoto = null }) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f)),
-                contentAlignment = Alignment.Center) {
-                AsyncImage(
-                    model = vm.repo.photoFile(photo.file),
-                    contentDescription = photo.title,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                pScale = (pScale * zoom).coerceIn(1f, 5f)
-                                pOffset += pan
-                            }
+            BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f))) {
+                val containerW = constraints.maxWidth.toFloat()
+                val containerH = constraints.maxHeight.toFloat()
+                val density = LocalDensity.current
+                val fitScale = if (photoW > 0 && photoH > 0)
+                    min(containerW / photoW, containerH / photoH) else 1f
+                val fitW = if (photoW > 0) photoW * fitScale else containerW
+                val fitH = if (photoH > 0) photoH * fitScale else containerH
+    
+                Box(
+                    Modifier.fillMaxSize().clipToBounds()
+                        .pointerInput(photo.id, fitW, fitH) {
+                            detectViewerGestures(
+                                getViewport = { Viewport(pScale, pOffset) },
+                                fitW = fitW, fitH = fitH,
+                                containerW = containerW, containerH = containerH,
+                                onTransform = { vp -> pScale = vp.scale; pOffset = vp.offset },
+                                onSwipe = { _, _ -> }
+                            )
                         }
-                        .graphicsLayer {
-                            scaleX = pScale; scaleY = pScale
-                            translationX = pOffset.x; translationY = pOffset.y
-                        })
+                ) {
+                    if (photoW > 0 && photoH > 0) {
+                        ZoomableRegionImage(
+                            file = vm.repo.photoFile(photo.file),
+                            imageW = photoW, imageH = photoH,
+                            containerW = containerW, containerH = containerH,
+                            scale = pScale, offsetX = pOffset.x, offsetY = pOffset.y,
+                            fitW = fitW, fitH = fitH,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+    
                 Box(Modifier.align(Alignment.TopEnd).padding(16.dp).size(44.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .clickable { viewPhoto = null },
