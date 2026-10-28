@@ -5,7 +5,13 @@ import android.graphics.BitmapFactory
 import android.graphics.BitmapRegionDecoder
 import android.graphics.Rect
 import androidx.compose.foundation.Canvas
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -33,7 +39,6 @@ fun ZoomableRegionImage(
     var regionBitmap by remember(file) { mutableStateOf<Bitmap?>(null) }
     var regionRect by remember(file) { mutableStateOf<Rect?>(null) }
     var decoder by remember(file) { mutableStateOf<BitmapRegionDecoder?>(null) }
-    // Флаг: первый тайл грузим без debounce
     var hasLoadedTile by remember(file) { mutableStateOf(false) }
 
     LaunchedEffect(file) {
@@ -44,75 +49,84 @@ fun ZoomableRegionImage(
         }
     }
 
-	LaunchedEffect(
-		file, scale, offsetX, offsetY, fitW, fitH, containerW, containerH, decoder
-	) {
-		val dec = decoder ?: return@LaunchedEffect
-		if (!scale.isFinite() || scale < 1.2f || imageW <= 0 || imageH <= 0) {
-			regionBitmap?.recycle()
-			regionBitmap = null
-			regionRect = null
-			return@LaunchedEffect
-		}
-		if (!fitW.isFinite() || fitW <= 0f || !fitH.isFinite() || fitH <= 0f) return@LaunchedEffect
-		if (hasLoadedTile) delay(120)
+    LaunchedEffect(
+        file, scale, offsetX, offsetY, fitW, fitH, containerW, containerH, decoder
+    ) {
+        val dec = decoder ?: return@LaunchedEffect
+        if (!scale.isFinite() || scale < 1.2f || imageW <= 0 || imageH <= 0) {
+            regionBitmap?.recycle()
+            regionBitmap = null
+            regionRect = null
+            return@LaunchedEffect
+        }
+        if (!fitW.isFinite() || fitW <= 0f || !fitH.isFinite() || fitH <= 0f) return@LaunchedEffect
+        if (hasLoadedTile) delay(120)
 
-		val fitScale = fitW / imageW
-		if (!fitScale.isFinite() || fitScale <= 0f) return@LaunchedEffect
-		val inv = 1f / (fitScale * scale)
+        val fitScale = fitW / imageW
+        if (!fitScale.isFinite() || fitScale <= 0f) return@LaunchedEffect
+        val inv = 1f / (fitScale * scale)
+        if (!inv.isFinite()) return@LaunchedEffect
 
-		val srcLeft = ((-offsetX) * inv).coerceIn(0f, imageW.toFloat())
-		val srcTop = ((-offsetY) * inv).coerceIn(0f, imageH.toFloat())
-		val srcRight = ((containerW - offsetX) * inv).coerceIn(0f, imageW.toFloat())
-		val srcBottom = ((containerH - offsetY) * inv).coerceIn(0f, imageH.toFloat())
+        val srcLeft   = ((-offsetX) * inv).coerceIn(0f, imageW.toFloat())
+        val srcTop    = ((-offsetY) * inv).coerceIn(0f, imageH.toFloat())
+        val srcRight  = ((containerW - offsetX) * inv).coerceIn(0f, imageW.toFloat())
+        val srcBottom = ((containerH - offsetY) * inv).coerceIn(0f, imageH.toFloat())
 
-		if (srcRight <= srcLeft || srcBottom <= srcTop) return@LaunchedEffect
+        if (srcRight <= srcLeft || srcBottom <= srcTop) return@LaunchedEffect
 
-		val rect = Rect(
-			srcLeft.roundToInt().coerceIn(0, imageW - 1),
-			srcTop.roundToInt().coerceIn(0, imageH - 1),
-			srcRight.roundToInt().coerceIn(1, imageW),
-			srcBottom.roundToInt().coerceIn(1, imageH)
-		)
-		if (rect.width() <= 0 || rect.height() <= 0) return@LaunchedEffect
+        val rect = Rect(
+            srcLeft.roundToInt().coerceIn(0, imageW - 1),
+            srcTop.roundToInt().coerceIn(0, imageH - 1),
+            srcRight.roundToInt().coerceIn(1, imageW),
+            srcBottom.roundToInt().coerceIn(1, imageH)
+        )
+        if (rect.width() <= 0 || rect.height() <= 0) return@LaunchedEffect
 
-		val bmp = withContext(Dispatchers.IO) {
-			try { dec.decodeRegion(rect, BitmapFactory.Options().apply { inSampleSize = 1 }) }
-			catch (_: Throwable) { null }
-		}
-		hasLoadedTile = true
-		if (bmp != null) {
-			regionBitmap?.recycle()
-			regionBitmap = bmp
-			regionRect = rect
-		}
-	}
+        val bmp = withContext(Dispatchers.IO) {
+            try { dec.decodeRegion(rect, BitmapFactory.Options().apply { inSampleSize = 1 }) }
+            catch (_: Throwable) { null }
+        }
+        hasLoadedTile = true
+        if (bmp != null) {
+            regionBitmap?.recycle()
+            regionBitmap = bmp
+            regionRect = rect
+        }
+    }
 
     Canvas(modifier = modifier) {
         drawIntoCanvas { canvas ->
             val native = canvas.nativeCanvas
-            baseBitmap?.let { base ->
-                native.save()
-                native.translate(offsetX, offsetY)
-                native.scale(scale, scale)
+
+            val base = baseBitmap
+            if (base != null) {
                 try {
-					native.drawBitmap(region, 0f, 0f, null)
-				} catch (_: Throwable) {}
-                native.restore()
+                    native.save()
+                    native.translate(offsetX, offsetY)
+                    native.scale(scale, scale)
+                    native.drawBitmap(base, null, Rect(0, 0, fitW.roundToInt(), fitH.roundToInt()), null)
+                    native.restore()
+                } catch (_: Throwable) {}
             }
+
             val region = regionBitmap
             val rect = regionRect
             if (region != null && rect != null) {
-                val fitScale = fitW / imageW
+                val fitScale = if (imageW > 0) fitW / imageW else 1f
                 val screenLeft = offsetX + rect.left * fitScale * scale
                 val screenTop = offsetY + rect.top * fitScale * scale
                 val screenW = rect.width() * fitScale * scale
                 val screenH = rect.height() * fitScale * scale
-                native.save()
-                native.translate(screenLeft, screenTop)
-                native.scale(screenW / region.width, screenH / region.height)
-                native.drawBitmap(region, 0f, 0f, null)
-                native.restore()
+                if (region.width > 0 && region.height > 0 &&
+                    screenW.isFinite() && screenH.isFinite()) {
+                    try {
+                        native.save()
+                        native.translate(screenLeft, screenTop)
+                        native.scale(screenW / region.width, screenH / region.height)
+                        native.drawBitmap(region, 0f, 0f, null)
+                        native.restore()
+                    } catch (_: Throwable) {}
+                }
             }
         }
     }
@@ -121,6 +135,7 @@ fun ZoomableRegionImage(
         onDispose {
             try { baseBitmap?.recycle() } catch (_: Throwable) {}
             try { regionBitmap?.recycle() } catch (_: Throwable) {}
+            // НЕ вызываем decoder.recycle() — native-крэш при параллельном decodeRegion
             decoder = null
         }
     }
@@ -132,5 +147,10 @@ private fun decodeSubsampled(file: File, maxSize: Int): Bitmap? {
     if (opts.outWidth <= 0) return null
     var sample = 1
     while (opts.outWidth / sample > maxSize || opts.outHeight / sample > maxSize) sample *= 2
-    return BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
+    return try {
+        BitmapFactory.decodeFile(
+            file.absolutePath,
+            BitmapFactory.Options().apply { inSampleSize = sample }
+        )
+    } catch (_: Throwable) { null }
 }

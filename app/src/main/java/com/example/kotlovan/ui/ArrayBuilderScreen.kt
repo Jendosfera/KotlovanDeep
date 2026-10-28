@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,7 +34,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -76,17 +74,12 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
 
-    LaunchedEffect(aux) { 
-		val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
-		val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
-		offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
-	}
+    LaunchedEffect(aux) { vm.useAux = aux }
 
     var scale by remember(aux) { mutableStateOf(1f) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }
     var longPressMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var initialized by remember(aux) { mutableStateOf(false) }
     var showNameDialog by remember { mutableStateOf(false) }
     var fileName by remember { mutableStateOf("array.zip") }
 
@@ -119,8 +112,10 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
             }
         }
-        val rFrom = bounds[0] - 1; val rTo = bounds[1] + 1
-        val cFrom = bounds[2] - 1; val cTo = bounds[3] + 1
+        val rFrom = bounds[0] - 1
+        val rTo = bounds[1] + 1
+        val cFrom = bounds[2] - 1
+        val cTo = bounds[3] + 1
 
         val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
@@ -128,17 +123,16 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
         val totalW = (cTo - cFrom + 1) * step - cellGapPx
         val totalH = (rTo - rFrom + 1) * step - cellGapPx
 
-        LaunchedEffect(Unit) {
-            if (!initialized) {
-                val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
-                val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
-                offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
-                initialized = true
-            }
+        // Центрирование на текущей ячейке при смене массива
+        LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol) {
+            val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
+            val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
+            offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
         }
 
         Box(
-            Modifier.fillMaxSize()
+            Modifier
+                .fillMaxSize()
                 .pointerInput(totalW, totalH, containerW, containerH) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, offset) },
@@ -151,11 +145,15 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                 }
         ) {
             Box(
-                Modifier.fillMaxSize().graphicsLayer {
-                    transformOrigin = TransformOrigin(0f, 0f)
-                    translationX = offset.x; translationY = offset.y
-                    scaleX = scale; scaleY = scale
-                }
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        translationX = offset.x
+                        translationY = offset.y
+                        scaleX = scale
+                        scaleY = scale
+                    }
             ) {
                 for (r in rFrom..rTo) for (c in cFrom..cTo) {
                     val data = vm.cell(r, c)
@@ -163,15 +161,18 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                     val yPx = (r - rFrom) * step
                     val isPlus = data == null && hasNeighbor(r, c, cells)
                     val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
-                    val isSelected = data != null && vm.active.lastRow == r && vm.active.lastCol == c
+                    val isSelected = data != null &&
+                            vm.active.lastRow == r && vm.active.lastCol == c
 
                     Box(
-                        Modifier.graphicsLayer { translationX = xPx; translationY = yPx }
+                        Modifier
+                            .graphicsLayer { translationX = xPx; translationY = yPx }
                             .size(CELL_SIZE.dp)
                     ) {
                         when {
                             data != null -> CreatedCell(
-                                data = data, vm = vm,
+                                data = data,
+                                vm = vm,
                                 isSelected = isSelected,
                                 isSwapTarget = longPressMode && selectedForSwap != null &&
                                         (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
@@ -180,9 +181,12 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                                         if (selectedForSwap == null) selectedForSwap = r to c
                                         else {
                                             vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-                                            selectedForSwap = null; longPressMode = false
+                                            selectedForSwap = null
+                                            longPressMode = false
                                         }
-                                    } else vm.updateLastCell(r, c)
+                                    } else {
+                                        vm.updateLastCell(r, c)
+                                    }
                                 },
                                 onDoubleTap = { nav.navigate("card/$r/$c") },
                                 onLongPress = {
@@ -192,16 +196,16 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
                                 }
                             )
                             isPlus || isEmptyStart -> PlusButton(
-								onClick = {
-									if (longPressMode && selectedForSwap != null) {
-										vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
-										selectedForSwap = null
-										longPressMode = false
-									} else if (!longPressMode) {
-										nav.navigate("card/$r/$c")
-									}
-								}
-							)
+                                onClick = {
+                                    if (longPressMode && selectedForSwap != null) {
+                                        vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
+                                        selectedForSwap = null
+                                        longPressMode = false
+                                    } else if (!longPressMode) {
+                                        nav.navigate("card/$r/$c")
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -210,7 +214,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
 
         // Верхняя панель
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Синяя стрелка на жёлтом с чёрной каймой
             Box(
                 Modifier.size(44.dp).clip(CircleShape)
                     .background(Yellow).border(7.dp, Color.Black, CircleShape)
@@ -220,7 +223,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
 
             Spacer(Modifier.weight(1f))
 
-            // Синий замок на жёлтом кружке с чёрной каймой
             Box(
                 Modifier.size(44.dp).clip(CircleShape)
                     .background(Yellow).border(7.dp, Color.Black, CircleShape)
@@ -234,7 +236,6 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
 
             Spacer(Modifier.width(4.dp))
 
-            // Значок рейтинга
             Box(
                 Modifier.size(44.dp).clip(CircleShape)
                     .background(Yellow).border(7.dp, Color.Black, CircleShape)
@@ -255,7 +256,10 @@ fun ArrayBuilderScreen(nav: NavHostController, vm: AppViewModel, aux: Boolean) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = {
-                        if (vm.active.cells.isNotEmpty()) { vm.autosave(); nav.navigate("viewer") }
+                        if (vm.active.cells.isNotEmpty()) {
+                            vm.autosave()
+                            nav.navigate("viewer")
+                        }
                     },
                     enabled = vm.active.cells.isNotEmpty(),
                     colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Color.Black),
@@ -302,9 +306,13 @@ private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean =
 
 @Composable
 private fun CreatedCell(
-    data: CellData, vm: AppViewModel,
-    isSelected: Boolean, isSwapTarget: Boolean,
-    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
+    data: CellData,
+    vm: AppViewModel,
+    isSelected: Boolean,
+    isSwapTarget: Boolean,
+    onClick: () -> Unit,
+    onDoubleTap: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val borderColor = when {
         isSelected -> Color(0xFF00C853)
@@ -316,8 +324,12 @@ private fun CreatedCell(
         shape = shape,
         elevation = CardDefaults.cardElevation(6.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxSize()
-            .then(if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape) else Modifier)
+        modifier = Modifier
+            .fillMaxSize()
+            .then(
+                if (isSelected || isSwapTarget) Modifier.border(3.dp, borderColor, shape)
+                else Modifier
+            )
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = { onDoubleTap() },
@@ -327,14 +339,26 @@ private fun CreatedCell(
             }
     ) {
         Column(Modifier.fillMaxSize().padding(6.dp)) {
-            Text(data.title.ifBlank { "Без названия" }, maxLines = 1,
-                style = MaterialTheme.typography.bodySmall)
+            Text(
+                data.title.ifBlank { "Без названия" },
+                maxLines = 1,
+                style = MaterialTheme.typography.bodySmall
+            )
             Spacer(Modifier.height(4.dp))
-            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFFCFD8DC))) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFCFD8DC))
+            ) {
                 data.imageFile?.let { f ->
-                    AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
-                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    AsyncImage(
+                        model = vm.repo.imageFile(f),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
@@ -347,7 +371,8 @@ private fun PlusButton(onClick: () -> Unit) {
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(6.dp),
         colors = CardDefaults.cardColors(containerColor = Blue),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
             .border(7.dp, Color.Black, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
     ) {

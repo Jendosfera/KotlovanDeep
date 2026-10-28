@@ -242,30 +242,30 @@ fun LinkPickerScreen(
             }
         }
 
-           OutlinedIconButton(
-            onClick = {
-                val cell = vm.cell(row, col)
-                if (cell == null || imageW <= 0 || imageH <= 0) {
-                    vm.useAux = originalUseAux
-                    nav.popBackStack()
-                    return@OutlinedIconButton
-                }
-                val imgX = (containerW / 2f - offsetX) / scale.coerceAtLeast(0.01f)
-                val imgY = (containerH / 2f - offsetY) / scale.coerceAtLeast(0.01f)
-                val nx = (imgX / fitW).coerceIn(0f, 1f)
-                val ny = (imgY / fitH).coerceIn(0f, 1f)
-                val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
-                vm.setCommentLink(comRow, comCol, commentId, newLink)
-                if (vm.linkReturn != null) vm.pendingRejump = newLink
-                // КРИТИЧНО: вернуть массив до popBackStack, иначе CommentEditorScreen
-                // увидит vm.cell(comRow,comCol) == null и покажет белый экран
-                vm.useAux = originalUseAux
-                nav.popBackStack()
-            },
-            icon = Icons.Default.Check,
-            description = "OK",
-            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-        )
+        OutlinedIconButton(
+			onClick = {
+				val cell = vm.cell(row, col)
+				if (cell == null || imageW <= 0 || imageH <= 0) {
+					try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+					nav.popBackStack()
+					return@OutlinedIconButton
+				}
+				val imgX = (containerW / 2f - offsetX) / scale.coerceAtLeast(0.01f)
+				val imgY = (containerH / 2f - offsetY) / scale.coerceAtLeast(0.01f)
+				val nx = (imgX / fitW).coerceIn(0f, 1f)
+				val ny = (imgY / fitH).coerceIn(0f, 1f)
+				val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
+				vm.setCommentLink(comRow, comCol, commentId, newLink)
+				if (vm.linkReturn != null) vm.pendingRejump = newLink
+
+				// КРИТИЧНО: вернуть исходный массив до popBackStack
+				try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+				nav.popBackStack()
+			},
+			icon = Icons.Default.Check,
+			description = "OK",
+			modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+		)
     }
 }
 
