@@ -174,17 +174,7 @@ fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col:
         nav.popBackStack()
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            if (title.isBlank()) {
-                val c = vm.cell(row, col) ?: return@onDispose
-                if (c.comments.any { it.id == id }) {
-                    vm.setComments(row, col, c.comments.filterNot { it.id == id })
-                    vm.autosave()
-                }
-            }
-        }
-    }
+
 
     if (moving) {
         MoveCommentOverlay(cell, vm, pin.x, pin.y,
