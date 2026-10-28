@@ -7,7 +7,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,7 +50,6 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.vm.AppViewModel
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -64,7 +62,6 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
     val archive = vm.config.photoArchive
 
-    // Собираем все пины
     val allPins = remember(archive) {
         val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
         for ((k, cell) in archive.cells) {
@@ -87,7 +84,6 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
     val expandedRows = remember { mutableStateMapOf<Int, Boolean>() }
     val expandedCols = remember { mutableStateMapOf<Pair<Int, Int>, Boolean>() }
 
-    // Инициализация: всё включено
     remember(allPins) {
         for ((rc, pin) in allPins) {
             selectedRows[rc.first] = true
@@ -107,7 +103,6 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
         if (uri != null) {
-            val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
             val ids = selectedPins.filterValues { it }.keys
             if (vm.generatePhotoReport(ids, dateFrom, dateTo, uri))
                 Toast.makeText(ctx, "Фотоотчёт создан", Toast.LENGTH_SHORT).show()
@@ -115,13 +110,8 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    Box(
-        Modifier.fillMaxSize()
-            .background(Yellow)
-            .border(7.dp, Color.Black)
-    ) {
+    Box(Modifier.fillMaxSize().background(Yellow).border(7.dp, Color.Black)) {
         Column(Modifier.fillMaxSize().padding(8.dp)) {
-            // Верхняя панель
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(44.dp).clip(CircleShape).background(Yellow)
@@ -140,15 +130,12 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
 
             Spacer(Modifier.height(8.dp))
 
-            // Дерево
             LazyColumn(Modifier.weight(1f)) {
                 for ((r, colsMap) in grouped) {
                     item {
                         Row(
-                            Modifier.fillMaxWidth()
-                                .background(Yellow)
-                                .border(3.dp, Color.Black)
-                                .padding(4.dp),
+                            Modifier.fillMaxWidth().background(Yellow)
+                                .border(3.dp, Color.Black).padding(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
@@ -163,8 +150,7 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
                             )
                             Text(
                                 archive.rowLabels[r] ?: "Строка ${r + 1}",
-                                Modifier.weight(1f),
-                                color = Color.Black,
+                                Modifier.weight(1f), color = Color.Black,
                                 fontWeight = FontWeight.Bold
                             )
                             Icon(
@@ -195,8 +181,7 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
                                     )
                                     Text(
                                         archive.colLabels[c] ?: "Столбец ${c + 1}",
-                                        Modifier.weight(1f),
-                                        color = Color.Black
+                                        Modifier.weight(1f), color = Color.Black
                                     )
                                     Icon(
                                         if (expandedCols[r to c] == true)
@@ -259,16 +244,12 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Column {
                     Text("от", color = Color.Black)
-                    OutlinedTextField(
-                        value = fromText, onValueChange = { fromText = it },
-                        singleLine = true, modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = fromText, onValueChange = { fromText = it },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     Text("до", color = Color.Black)
-                    OutlinedTextField(
-                        value = toText, onValueChange = { toText = it },
-                        singleLine = true, modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = toText, onValueChange = { toText = it },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
             },
             confirmButton = {

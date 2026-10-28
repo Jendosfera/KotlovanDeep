@@ -1,14 +1,8 @@
 package com.example.kotlovan.ui
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.widget.Toast
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.ui.zIndex
-import androidx.compose.ui.zIndex
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -44,9 +38,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -85,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
@@ -106,6 +103,8 @@ private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
 private data class PendingJump(val x: Float, val y: Float, val scale: Float)
 
 private val LinkBorderColor = Color(0xFF00C853)
+private val YellowColor = Color(0xFFFFEB3B)
+private val BlueColor = Color(0xFF1565C0)
 
 @Composable
 fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
@@ -127,38 +126,37 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var contextMenu by remember { mutableStateOf<Pair<Offset, List<CommentPin>>?>(null) }
     var pendingJump by remember { mutableStateOf<PendingJump?>(null) }
     var visibleTitles by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
-	var lastTapTime by remember { mutableStateOf(0L) }
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
 
     val inLinkMode = vm.linkReturn != null
-	
-	val saveArchiveLauncher = rememberLauncherForActivityResult(
-		ActivityResultContracts.CreateDocument("application/zip")
-	) { uri ->
-		if (uri != null) {
-			try {
-				ctx.contentResolver.takePersistableUriPermission(
-					uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-				)
-			} catch (_: Exception) {}
-			if (vm.savePhotoArchive(uri))
-				Toast.makeText(ctx, "Архив сохранён", Toast.LENGTH_SHORT).show()
-			else Toast.makeText(ctx, "Ошибка", Toast.LENGTH_SHORT).show()
-		}
-	}
 
-	val openArchiveLauncher = rememberLauncherForActivityResult(
-		ActivityResultContracts.OpenDocument()
-	) { uri ->
-		if (uri != null) {
-			if (vm.loadPhotoArchive(uri))
-				Toast.makeText(ctx, "Архив загружен", Toast.LENGTH_SHORT).show()
-			else Toast.makeText(ctx, "Ошибка загрузки", Toast.LENGTH_SHORT).show()
-		}
-	}	
-	
+    val saveArchiveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            if (vm.savePhotoArchive(uri))
+                Toast.makeText(ctx, "Архив сохранён", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(ctx, "Ошибка", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val openArchiveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            if (vm.loadPhotoArchive(uri))
+                Toast.makeText(ctx, "Архив загружен", Toast.LENGTH_SHORT).show()
+            else Toast.makeText(ctx, "Ошибка загрузки", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(500)
@@ -189,6 +187,17 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val allCols = vm.active.cells.keys.map { it.substringAfter(',').toInt() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
+
+        val rowColsList = vm.active.cells.keys
+            .mapNotNull { k ->
+                val p = k.split(",")
+                if (p.getOrNull(0)?.toIntOrNull() == row) p.getOrNull(1)?.toIntOrNull() else null
+            }.sorted()
+        val colRowsList = vm.active.cells.keys
+            .mapNotNull { k ->
+                val p = k.split(",")
+                if (p.getOrNull(1)?.toIntOrNull() == col) p.getOrNull(0)?.toIntOrNull() else null
+            }.sorted()
 
         fun persistViewport() {
             val c = vm.cell(row, col) ?: return
@@ -261,17 +270,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         }
 
         val cornerPx = with(density) { 80.dp.toPx() }
-        val rowColsList = vm.active.cells.keys
-            .mapNotNull { k ->
-                val p = k.split(",")
-                if (p.getOrNull(0)?.toIntOrNull() == row) p.getOrNull(1)?.toIntOrNull() else null
-            }.sorted()
-        val colRowsList = vm.active.cells.keys
-            .mapNotNull { k ->
-                val p = k.split(",")
-                if (p.getOrNull(1)?.toIntOrNull() == col) p.getOrNull(0)?.toIntOrNull() else null
-            }.sorted()
 
+        // Изображение
         AnimatedContent(
             targetState = "$row,$col",
             transitionSpec = {
@@ -302,7 +302,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             Box(Modifier.fillMaxSize().clipToBounds()) {
                 if (cell != null && imgFile != null && w > 0 && h > 0) {
                     ZoomableRegionImage(
-                        file = vm.repo.imageFile(imgFile), imageW = w, imageH = h,
+                        file = vm.repo.imageFile(imgFile),
+                        imageW = w, imageH = h,
                         containerW = containerW, containerH = containerH,
                         scale = scale, offsetX = offsetX, offsetY = offsetY,
                         fitW = cFitW, fitH = cFitH,
@@ -312,18 +313,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
+        // Слой перехвата
         Box(
             Modifier.fillMaxSize().clipToBounds()
-                .pointerInput(row, col, subMode, fitW, fitH, inLinkMode, showAllRow) {
+                .pointerInput(row, col, subMode, fitW, fitH, inLinkMode, showAllRow, vm.photoModeActive) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
                         fitW = fitW, fitH = fitH,
                         containerW = containerW, containerH = containerH,
-                        onTransform = { vp ->
-                            scale = vp.scale
-                            offsetX = vp.offset.x
-                            offsetY = vp.offset.y
-                        },
+                        onTransform = { vp -> scale = vp.scale; offsetX = vp.offset.x; offsetY = vp.offset.y },
                         onSwipe = { dx, dy ->
                             if (inLinkMode) {
                                 returnFromLink()
@@ -366,40 +364,40 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 }
                             }
                         },
-						onTap = { pos ->
-							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-							val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
-							if (inCorner) { iconsHidden = !iconsHidden; return@detectViewerGestures }
-							val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
-							if (hit != null) {
-								val (hr, hc, pin) = hit
-								val now = System.currentTimeMillis()
-								if (now - lastTapTime < 350L) {
-									// двойной тап — редактор
-									if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
-									else nav.navigate("comment/$hr/$hc/${pin.id}")
-									lastTapTime = 0L
-									return@detectViewerGestures
-								}
-								lastTapTime = now
-								if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
-								else {
-									val vnow = System.currentTimeMillis()
-									visibleTitles = if (pin.id in visibleTitles && (visibleTitles[pin.id] ?: 0L) > vnow)
-										visibleTitles - pin.id else visibleTitles + (pin.id to (vnow + 5000L))
-								}
-							}
-						},
+                        onTap = { pos ->
+                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+                            val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
+                            if (inCorner) { iconsHidden = !iconsHidden; return@detectViewerGestures }
+                            val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
+                            if (hit != null) {
+                                val (hr, hc, pin) = hit
+                                if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
+                                else nav.navigate("comment/$hr/$hc/${pin.id}")
+                            }
+                        },
                         onLongPress = { pos ->
-							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-							if (vm.photoModeActive) {
-								// В режиме фотофиксации — меню архива
-								contextMenu = pos to emptyList()
-								return@detectViewerGestures
-							}
-							val cell = vm.cell(row, col) ?: return@detectViewerGestures
-							...
-						}
+                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+                            if (vm.photoModeActive) {
+                                contextMenu = pos to emptyList()
+                                return@detectViewerGestures
+                            }
+                            val cell = vm.cell(row, col) ?: return@detectViewerGestures
+                            val visible = cell.comments.filter { pin ->
+                                val sx = pin.x * fitW * scale + offsetX
+                                val sy = pin.y * fitH * scale + offsetY
+                                sx in 0f..containerW && sy in 0f..containerH
+                            }
+                            val rowPins = if (showAllRow) {
+                                val extra = mutableListOf<CommentPin>()
+                                for (c in colRange) {
+                                    if (c == col) continue
+                                    val oc = vm.cell(row, c) ?: continue
+                                    extra += oc.comments
+                                }
+                                visible + extra
+                            } else visible
+                            if (rowPins.isNotEmpty()) contextMenu = pos to rowPins
+                        }
                     )
                 }
         )
@@ -413,7 +411,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     showTitle = pin.id in visibleTitles
                 )
             }
-            // Комментарии других ячеек строки
             if (showAllRow) {
                 for (c in colRange) {
                     if (c == col) continue
@@ -438,69 +435,84 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         // Верхняя панель
         if (!iconsHidden) {
             Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedIconButton(onClick = {
-                    if (inLinkMode) returnFromLink()
-                    else {
-                        persistViewport(); vm.autosave()
-                        val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
-                        if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
-                    }
-                }, icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod)
+                OutlinedIconButton(
+                    onClick = {
+                        if (inLinkMode) returnFromLink()
+                        else {
+                            persistViewport(); vm.autosave()
+                            val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
+                            if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
+                        }
+                    },
+                    icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
+                )
                 Spacer(Modifier.weight(1f))
-                OutlinedIconButton(onClick = { flashlight.toggle() },
-                    icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod)
-										// Иконка фотофиксации
-					if (!inLinkMode) {
-						Spacer(Modifier.width(4.dp))
-						val iconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
-						val tint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
-						Box(
-							Modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
-								.clickable {
-									vm.photoModeActive = !vm.photoModeActive
-									savedRow = -1; savedCol = -1
-									val t = vm.active
-									row = t.lastRow; col = t.lastCol
-									pendingJump = null
-								},
-							contentAlignment = Alignment.Center
-						) {
-							Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = tint,
-								modifier = Modifier.size(iconSize).alpha(cfg.iconOpacity))
-						}
-					}
-				if (!inLinkMode) {
-					val hasNestedInfo = (currentCell?.nestedRow ?: -1) >= 0
-					val isNestedItself = (currentCell?.parentRow ?: -1) >= 0
-					if (hasNestedInfo || isNestedItself) {
-						Spacer(Modifier.width(4.dp))
-						Box(
-							Modifier.size(44.dp).clip(CircleShape)
-								.background(Color(0xFFFFEB3B))
-								.border(5.dp, Color(0xFF1565C0), CircleShape)
-								.clickable {
-									persistViewport()
-									savedRow = -1
-									savedCol = -1
-									if (hasNestedInfo) {
-										row = currentCell!!.nestedRow
-										col = currentCell!!.nestedCol
-									} else if (isNestedItself) {
-										row = currentCell!!.parentRow
-										col = currentCell!!.parentCol
-									}
-									pendingJump = null
-								},
-							contentAlignment = Alignment.Center
-						) {
-							Icon(Icons.Default.Layers, "Вложение", tint = Color(0xFF1565C0))
-						}
-					}
-				}
+                OutlinedIconButton(
+                    onClick = { flashlight.toggle() },
+                    icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
+                )
+                if (!inLinkMode) {
+                    Spacer(Modifier.width(4.dp))
+                    val photoIconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
+                    val photoTint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .clickable {
+                                vm.photoModeActive = !vm.photoModeActive
+                                savedRow = -1; savedCol = -1
+                                val t = vm.active
+                                row = t.lastRow; col = t.lastCol
+                                pendingJump = null
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = photoTint,
+                            modifier = Modifier.size(photoIconSize).alpha(cfg.iconOpacity))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    val hasNested = (currentCell?.nestedRow ?: -1) >= 0
+                    val isNested = (currentCell?.parentRow ?: -1) >= 0
+                    if (hasNested || isNested) {
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape)
+                                .background(YellowColor)
+                                .border(5.dp, BlueColor, CircleShape)
+                                .clickable {
+                                    persistViewport()
+                                    savedRow = -1; savedCol = -1
+                                    if (hasNested) {
+                                        row = currentCell!!.nestedRow
+                                        col = currentCell!!.nestedCol
+                                    } else {
+                                        row = currentCell!!.parentRow
+                                        col = currentCell!!.parentCol
+                                    }
+                                    pendingJump = null
+                                },
+                            contentAlignment = Alignment.Center
+                        ) { Icon(Icons.Default.Layers, "Вложение", tint = BlueColor) }
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    OutlinedIconButton(
+                        onClick = {
+                            persistViewport()
+                            vm.useAux = !vm.useAux
+                            val t = vm.active
+                            savedRow = -1; savedCol = -1
+                            row = t.lastRow; col = t.lastCol
+                            pendingJump = null
+                        },
+                        icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
+                        description = "Массив", iconModifier = iconMod
+                    )
+                }
                 Spacer(Modifier.width(4.dp))
                 Box {
-                    OutlinedIconButton(onClick = { menuOpen = !menuOpen },
-                        icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod)
+                    OutlinedIconButton(
+                        onClick = { menuOpen = !menuOpen },
+                        icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
+                    )
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         if (inLinkMode) {
                             val lr = vm.linkReturn!!
@@ -512,7 +524,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
                                 menuOpen = false; subMode = ViewerSubMode.SET_COMMON_POINT
                             })
-                            DropdownMenuItem(text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
+                            DropdownMenuItem(
+                                text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
                                 onClick = {
                                     menuOpen = false
                                     val c = currentCell ?: return@DropdownMenuItem
@@ -525,7 +538,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                             ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
                                             ownOffsetY = if (newOwn) vOy else it.ownOffsetY)
                                     }
-                                })
+                                }
+                            )
                             DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
                                 menuOpen = false; subMode = ViewerSubMode.PLACE_COMMENT
                             })
@@ -538,6 +552,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
 
             if (subMode == ViewerSubMode.VIEW && !inLinkMode) {
+                val selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else BlueColor
                 Column(
                     Modifier.align(Alignment.CenterStart)
                         .padding(start = 4.dp, top = 60.dp, bottom = 100.dp)
@@ -549,7 +564,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         SideButton(
                             text = vm.active.rowLabels[r] ?: "R${r + 1}",
                             selected = (r == row), dimmed = isEmpty,
-							selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0),
+                            selectedColor = selectedColor,
                             onClick = { if (!isEmpty) { persistViewport(); row = r } },
                             onLongClick = { labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" }
                         )
@@ -566,7 +581,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         SideButton(
                             text = vm.active.colLabels[c] ?: "C${c + 1}",
                             selected = (c == col), dimmed = isEmpty,
-							selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0),
+                            selectedColor = selectedColor,
                             onClick = { if (!isEmpty) { persistViewport(); col = c } },
                             onLongClick = { labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" }
                         )
@@ -582,107 +597,112 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 ) {
                     Icon(
                         if (showAllRow) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        "Показать все строки", tint = Color.White,
+                        "Все строки", tint = Color.White,
                         modifier = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
                     )
                 }
             }
         }
 
-        // Режим «Общая точка»
         if (subMode == ViewerSubMode.SET_COMMON_POINT) {
             CrosshairBlack(Modifier.align(Alignment.Center))
-            OutlinedIconButton(onClick = {
-                val imgX = (containerW / 2f - offsetX) / scale
-                val imgY = (containerH / 2f - offsetY) / scale
-                val nx = (imgX / fitW).coerceIn(0f, 1f)
-                val ny = (imgY / fitH).coerceIn(0f, 1f)
-                vm.updateCell(row, col) { it.copy(commonX = nx, commonY = ny) }
-                if (currentCell?.ownPosition == true)
-                    vm.updateCell(row, col) { it.copy(ownOffsetX = 0f, ownOffsetY = 0f) }
-                else vm.setGlobalViewport(scale, 0f, 0f, row, col)
-                offsetX = containerW / 2f - nx * fitW * scale
-                offsetY = containerH / 2f - ny * fitH * scale
-                subMode = ViewerSubMode.VIEW
-            }, icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
-                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp))
-        }
-
-        // Режим «Установить комментарий»
-        if (subMode == ViewerSubMode.PLACE_COMMENT) {
-            CrosshairBlack(Modifier.align(Alignment.Center))
-            OutlinedIconButton(onClick = {
-                val cell = vm.cell(row, col)
-                if (cell != null) {
+            OutlinedIconButton(
+                onClick = {
                     val imgX = (containerW / 2f - offsetX) / scale
                     val imgY = (containerH / 2f - offsetY) / scale
                     val nx = (imgX / fitW).coerceIn(0f, 1f)
                     val ny = (imgY / fitH).coerceIn(0f, 1f)
-                    val cr = with(density) { 8.dp.toPx() }    // x2 от 4.dp
-                    val rad = (cr / (fitW * scale)).coerceIn(0.003f, 0.3f)
-                    val id = UUID.randomUUID().toString()
-                    val pin = CommentPin(id = id, x = nx, y = ny, radius = rad)
-                    vm.setComments(row, col, cell.comments + pin)
+                    vm.updateCell(row, col) { it.copy(commonX = nx, commonY = ny) }
+                    if (currentCell?.ownPosition == true)
+                        vm.updateCell(row, col) { it.copy(ownOffsetX = 0f, ownOffsetY = 0f) }
+                    else vm.setGlobalViewport(scale, 0f, 0f, row, col)
+                    offsetX = containerW / 2f - nx * fitW * scale
+                    offsetY = containerH / 2f - ny * fitH * scale
                     subMode = ViewerSubMode.VIEW
-                    if (vm.photoModeActive) {
-						nav.navigate("comment/$row/$col/$id?autoCamera=true")
-					} else {
-						nav.navigate("comment/$row/$col/$id")
-					}
-                }
-            }, icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
-                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp))
+                },
+                icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+            )
         }
-            
+
+        if (subMode == ViewerSubMode.PLACE_COMMENT) {
+            CrosshairBlack(Modifier.align(Alignment.Center))
+            OutlinedIconButton(
+                onClick = {
+                    val cell = vm.cell(row, col)
+                    if (cell != null) {
+                        val imgX = (containerW / 2f - offsetX) / scale
+                        val imgY = (containerH / 2f - offsetY) / scale
+                        val nx = (imgX / fitW).coerceIn(0f, 1f)
+                        val ny = (imgY / fitH).coerceIn(0f, 1f)
+                        val cr = with(density) { 8.dp.toPx() }
+                        val rad = (cr / (fitW * scale)).coerceIn(0.003f, 0.3f)
+                        val id = UUID.randomUUID().toString()
+                        val pin = CommentPin(id = id, x = nx, y = ny, radius = rad)
+                        vm.setComments(row, col, cell.comments + pin)
+                        subMode = ViewerSubMode.VIEW
+                        if (vm.photoModeActive) {
+                            nav.navigate("comment/$row/$col/$id?autoCamera=true")
+                        } else {
+                            nav.navigate("comment/$row/$col/$id")
+                        }
+                    }
+                },
+                icon = Icons.Default.Check, description = "OK", iconModifier = iconMod,
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+            )
+        }
+
         // Контекстное меню
         contextMenu?.let { (pos, pins) ->
-            val density2 = LocalDensity.current
-            val menuWidthPx = with(density2) { 220.dp.toPx() }
-            val closeRadiusPx = with(density2) { 24.dp.toPx() }
-            val closeBtnSize = with(density2) { 48.dp.toPx() }
-        
-            // Меню (под крестом)
+            val menuWidthPx = with(density) { 220.dp.toPx() }
+            val closeRadiusPx = with(density) { 24.dp.toPx() }
+            val closeBtnSize = with(density) { 48.dp.toPx() }
+
             Column(
-				if (vm.photoModeActive && pins.isEmpty()) {
-					Text("Сохранить архив", Modifier.fillMaxWidth().clickable {
-						contextMenu = null
-						saveArchiveLauncher.launch("Общий архив.zip")
-					}.padding(vertical = 8.dp), color = Color.Black)
-					Text("Загрузить архив", Modifier.fillMaxWidth().clickable {
-						contextMenu = null
-						openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-					}.padding(vertical = 8.dp), color = Color.Black)
-					Text("Создать фотоотчёт", Modifier.fillMaxWidth().clickable {
-						contextMenu = null
-						nav.navigate("photoreport")
-					}.padding(vertical = 8.dp), color = Color.Black)
-					return@let
-				}
                 Modifier
                     .offset { IntOffset((pos.x - menuWidthPx).toInt(), pos.y.toInt()) }
                     .width(220.dp)
-                    .background(Color(0xFFFFEB3B), RoundedCornerShape(8.dp))
-                    .border(7.dp, Color(0xFF1565C0), RoundedCornerShape(8.dp))
+                    .background(YellowColor, RoundedCornerShape(8.dp))
+                    .border(7.dp, BlueColor, RoundedCornerShape(8.dp))
                     .padding(8.dp)
                     .zIndex(1f)
             ) {
-                if (pins.isEmpty()) Text("Нет комментариев", color = Color.Black)
-                else for (pin in pins) {
-                    Text(
-                        pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            nav.navigate("comment/$row/$col/${pin.id}")
+                if (vm.photoModeActive && pins.isEmpty()) {
+                    Text("Сохранить архив",
+                        Modifier.fillMaxWidth().clickable {
                             contextMenu = null
-                        }.padding(vertical = 6.dp),
-                        color = Color.Black
-                    )
+                            saveArchiveLauncher.launch("Общий архив.zip")
+                        }.padding(vertical = 8.dp), color = Color.Black)
+                    Text("Загрузить архив",
+                        Modifier.fillMaxWidth().clickable {
+                            contextMenu = null
+                            openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                        }.padding(vertical = 8.dp), color = Color.Black)
+                    Text("Создать фотоотчёт",
+                        Modifier.fillMaxWidth().clickable {
+                            contextMenu = null
+                            nav.navigate("photoreport")
+                        }.padding(vertical = 8.dp), color = Color.Black)
+                } else if (pins.isEmpty()) {
+                    Text("Нет комментариев", color = Color.Black)
+                } else {
+                    for (pin in pins) {
+                        Text(
+                            pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                nav.navigate("comment/$row/$col/${pin.id}")
+                                contextMenu = null
+                            }.padding(vertical = 6.dp),
+                            color = Color.Black
+                        )
+                    }
                 }
             }
-            // Красный крест ПОВЕРХ меню
             Box(
                 Modifier
                     .offset { IntOffset((pos.x - closeRadiusPx).toInt(), (pos.y - closeRadiusPx).toInt()) }
-                    .size(with(density2) { closeBtnSize.toDp() })
+                    .size(with(density) { closeBtnSize.toDp() })
                     .background(Color.Red, CircleShape)
                     .border(7.dp, Color.Black, CircleShape)
                     .clickable { contextMenu = null }
@@ -790,21 +810,17 @@ private fun CrosshairBlack(modifier: Modifier = Modifier) {
 @Composable
 private fun SideButton(
     text: String, selected: Boolean, dimmed: Boolean = false,
-	selectedColor: Color = Color(0xFF1565C0),
+    selectedColor: Color = BlueColor,
     onClick: () -> Unit, onLongClick: () -> Unit
 ) {
-    val baseSize = if (dimmed) 0.8f else 1f
+    val baseScale = if (dimmed) 0.8f else 1f
     Box(
         Modifier
             .size(width = 52.dp, height = 40.dp)
-            .scale(if (selected) 1.15f else baseSize)
+            .scale(if (selected) 1.15f else baseScale)
             .alpha(if (dimmed) 0.5f else 1f)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-				if (selected) selectedColor else Color.Black.copy(alpha = 0.5f) {
-					if (vm.photoModeActive) Color(0xFF4CAF50) else Color(0xFF1565C0)
-				} else Color.Black.copy(alpha = 0.5f)
-			)
+            .background(if (selected) selectedColor else Color.Black.copy(alpha = 0.5f))
             .pointerInput(text, selected, dimmed) {
                 detectTapGestures(onTap = { onClick() }, onLongPress = { onLongClick() })
             },
@@ -857,11 +873,7 @@ private fun CommentPinRender(
             Modifier.fillMaxSize().padding(diameterDp / 4),
             contentAlignment = Alignment.Center
         ) {
-            CommentIconShape(
-                type = pin.iconType,
-                color = Color(pin.color.toInt()),
-                sizeDp = inner
-            )
+            CommentIconShape(type = pin.iconType, color = Color(pin.color.toInt()), sizeDp = inner)
         }
         if (pin.shortLabel.isNotBlank()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

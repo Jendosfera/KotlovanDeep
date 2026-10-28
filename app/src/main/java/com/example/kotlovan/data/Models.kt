@@ -31,15 +31,15 @@ data class CommentPin(
     val radius: Float,
     val title: String = "",
     val text: String = "",
-    val color: Long = 0xFFFFEB3B,             // жёлтый по умолчанию
+    val color: Long = 0xFFFFEB3B,
     val iconType: CommentIconType = CommentIconType.CIRCLE,
     val link: PinLink? = null,
     val photos: List<CommentPhoto> = emptyList(),
     val rating: Int = 0,
     val shortLabel: String = "",
-    val strokeColor: Long = 0xFF1976D2,       // синяя кайма
-    val strokeRatio: Float = 0.25f            // толщина = 1/4 диаметра
-	val createdAt: Long = System.currentTimeMillis()
+    val strokeColor: Long = 0xFF1976D2,
+    val strokeRatio: Float = 0.25f,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Serializable
@@ -56,12 +56,11 @@ data class CellData(
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
     val ownOffsetY: Float = 0f,
-    // === Вложенные ячейки ===
-    val parentRow: Int = -1,              // если я подложка — координаты главной
+    val parentRow: Int = -1,
     val parentCol: Int = -1,
-    val nestedImageFile: String? = null,  // если у меня есть подложка — её image
+    val nestedImageFile: String? = null,
     val nestedTitle: String = "",
-    val nestedRow: Int = -1,              // координаты подложки
+    val nestedRow: Int = -1,
     val nestedCol: Int = -1
 )
 
@@ -85,7 +84,7 @@ data class ArrayConfig(
     val name: String = "Массив",
     val main: SubArray = SubArray(),
     val aux: SubArray = SubArray(),
-    val photoArchive: SubArray = SubArray(),   // ← новое
+    val photoArchive: SubArray = SubArray(),
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )
@@ -102,6 +101,7 @@ data class LinkReturnState(
     val commentCol: Int,
     val commentId: String
 )
+
 // ==== Theme ====
 
 @Serializable
