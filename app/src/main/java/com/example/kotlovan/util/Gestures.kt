@@ -23,9 +23,9 @@ suspend fun PointerInputScope.detectViewerGestures(
     tapThreshold: Float = 20f,
     longPressMs: Long = 500L,
     minScale: Float = 0.3f,
-    maxScale: Float = 12f
+    maxScale: Float = 12f,
+    alwaysPanOneFinger: Boolean = false
 ) {
-    // Защита от невалидных границ
     val safeMinScale = if (!minScale.isFinite() || minScale <= 0f) 0.3f else minScale
     val safeMaxScale = if (!maxScale.isFinite() || maxScale <= safeMinScale) safeMinScale * 10f else maxScale
 
@@ -46,9 +46,6 @@ suspend fun PointerInputScope.detectViewerGestures(
         while (active) {
             val elapsed = System.currentTimeMillis() - startTime
             val remaining = longPressMs - elapsed
-            // Ждём следующего pointer-события, но не дольше оставшегося времени
-            // до срабатывания long press. Если long press уже сработал или жест
-            // превратился в transform/pan — ждём бесконечно.
             val timeout = if (!longPressFired && !isTransform && !didPan)
                 remaining.coerceAtLeast(1L)
             else Long.MAX_VALUE
@@ -56,7 +53,6 @@ suspend fun PointerInputScope.detectViewerGestures(
             val event = withTimeoutOrNull(timeout) { awaitPointerEvent() }
 
             if (event == null) {
-                // Таймаут — сработал long press, не дожидаясь отпускания пальца
                 if (!longPressFired && !isTransform && !didPan) {
                     longPressFired = true
                     onLongPress(down.position)
@@ -85,7 +81,6 @@ suspend fun PointerInputScope.detectViewerGestures(
                     var newOx = focal.x - anchorX * newScale
                     var newOy = focal.y - anchorY * newScale
 
-                    // Защита от NaN/Inf
                     if (!newOx.isFinite()) newOx = startVp.offset.x
                     if (!newOy.isFinite()) newOy = startVp.offset.y
                     if (!newScale.isFinite() || newScale <= 0f) {
@@ -110,13 +105,13 @@ suspend fun PointerInputScope.detectViewerGestures(
                 val vp = getViewport()
 
                 if (alwaysPanOneFinger || vp.scale > 1.05f) {
-                    // При увеличении один палец = панорамирование
                     if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
                         didPan = true
                         var newOx = vp.offset.x + dx
                         var newOy = vp.offset.y + dy
                         if (!newOx.isFinite()) newOx = vp.offset.x
                         if (!newOy.isFinite()) newOy = vp.offset.y
+                        // Для builder (fitW=0) не ограничиваем — свободное перемещение
                         if (fitW > 0f && fitW.isFinite()) {
                             newOx = newOx.coerceIn(containerW / 2f - fitW * vp.scale, containerW / 2f)
                         }
@@ -126,7 +121,6 @@ suspend fun PointerInputScope.detectViewerGestures(
                         onTransform(Viewport(vp.scale, Offset(newOx, newOy)))
                     }
                 } else {
-                    // Без увеличения — копим смещение для свайпа
                     sumDx += dx
                     sumDy += dy
                 }
@@ -135,7 +129,6 @@ suspend fun PointerInputScope.detectViewerGestures(
             if (event.changes.none { it.pressed }) active = false
         }
 
-        // Обработка завершения жеста (tap / swipe) если это не был transform/pan/long
         if (!isTransform && !didPan && !longPressFired) {
             val dist = sqrt(sumDx * sumDx + sumDy * sumDy)
             if (!dist.isFinite()) return@awaitEachGesture
@@ -155,7 +148,6 @@ fun clampOffset(
     offset: Offset, scale: Float, fitW: Float, fitH: Float,
     containerW: Float, containerH: Float
 ): Offset {
-    // Защита от NaN/Inf во всех аргументах
     val s = if (!scale.isFinite() || scale <= 0f) 1f else scale
     val fw = if (!fitW.isFinite() || fitW <= 0f) containerW else fitW
     val fh = if (!fitH.isFinite() || fitH <= 0f) containerH else fitH
@@ -170,7 +162,6 @@ fun clampOffset(
     val ox = if (!offset.x.isFinite()) 0f else offset.x
     val oy = if (!offset.y.isFinite()) 0f else offset.y
 
-    // coerceIn требует min <= max, иначе кинет IllegalArgumentException
     val safeMinX = minOf(minX, maxX)
     val safeMaxX = maxOf(minX, maxX)
     val safeMinY = minOf(minY, maxY)
@@ -180,32 +171,4 @@ fun clampOffset(
         ox.coerceIn(safeMinX, safeMaxX),
         oy.coerceIn(safeMinY, safeMaxY)
     )
-}
-suspend fun PointerInputScope.detectViewerGestures(
-    getViewport: () -> Viewport,
-    fitW: Float, fitH: Float,
-    containerW: Float, containerH: Float,
-    onTransform: (Viewport) -> Unit,
-    onSwipe: (dx: Float, dy: Float) -> Unit,
-    onTap: (Offset) -> Unit = {},
-    onLongPress: (Offset) -> Unit = {},
-    swipeThreshold: Float = 80f,
-    tapThreshold: Float = 20f,
-    longPressMs: Long = 500L,
-    minScale: Float = 0.3f,
-    maxScale: Float = 12f,
-    alwaysPanOneFinger: Boolean = false   // ← НОВОЕ
-) {
-    // ...
-    // в блоке else if (pressed.size == 1 && !isTransform) { ... }
-    // заменить условие:
-    if (alwaysPanOneFinger || vp.scale > 1.05f) {
-        // панорамирование одним пальцем
-        ...
-    } else {
-        // свайп (накапливаем sumDx/sumDy)
-        sumDx += dx
-        sumDy += dy
-    }
-    // ...
 }

@@ -18,32 +18,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val repo = ArrayRepository(app)
 
-	var lastRatingRow by mutableStateOf(-1)
-	var hiddenRows by mutableStateOf(setOf<Int>())
-	var hiddenCols by mutableStateOf(setOf<Int>())
-
-	fun toggleRowVisibility(r: Int) {
- 	   hiddenRows = if (r in hiddenRows) hiddenRows - r else hiddenRows + r
-	}
-	fun toggleColVisibility(c: Int) {
-	    hiddenCols = if (c in hiddenCols) hiddenCols - c else hiddenCols + c
-	}
-	
-	private val themeRepo = com.example.kotlovan.theme.ThemeRepository(app)
-
-	var themeProfile by mutableStateOf(themeRepo.load())
-		private set
-
-	fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
-		themeProfile = profile
-		themeRepo.save(profile)
-	}
-
-	fun resetTheme() {
-		themeRepo.reset()
-		themeProfile = themeRepo.load()
-	}
-
     var config by mutableStateOf(ArrayConfig())
         private set
 
@@ -51,46 +25,74 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     var useAux by mutableStateOf(false)
-	var photoModeActive by mutableStateOf(false)
+    var photoModeActive by mutableStateOf(false)
+
     var linkReturn by mutableStateOf<LinkReturnState?>(null)
     var pendingRejump by mutableStateOf<PinLink?>(null)
 
-    /** Ячейки (row, col), которые потеряли картинки при загрузке старого JSON. */
     var pendingReconnect by mutableStateOf(emptyList<Pair<Int, Int>>())
         private set
 
-	val active: SubArray
-		get() = when {
-			photoModeActive && useAux -> config.photoAux
-			photoModeActive -> config.photoMain
-			useAux -> config.aux
-			else -> config.main
-		}
+    var lastRatingRow by mutableStateOf(-1)
+    var hiddenRows by mutableStateOf(setOf<Int>())
+    var hiddenCols by mutableStateOf(setOf<Int>())
+
+    private val themeRepo = com.example.kotlovan.theme.ThemeRepository(app)
+
+    var themeProfile by mutableStateOf(themeRepo.load())
+        private set
+
+    val active: SubArray
+        get() = when {
+            photoModeActive && useAux -> config.photoAux
+            photoModeActive -> config.photoMain
+            useAux -> config.aux
+            else -> config.main
+        }
 
     init {
-        repo.loadAutosave()?.let { config = normalize(it) }
+        val loaded = repo.loadAutosave()
+        if (loaded != null) config = normalize(loaded)
+    }
+
+    fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
+        themeProfile = profile
+        themeRepo.save(profile)
+    }
+
+    fun resetTheme() {
+        themeRepo.reset()
+        themeProfile = themeRepo.load()
+    }
+
+    fun toggleRowVisibility(r: Int) {
+        hiddenRows = if (r in hiddenRows) hiddenRows - r else hiddenRows + r
+    }
+    fun toggleColVisibility(c: Int) {
+        hiddenCols = if (c in hiddenCols) hiddenCols - c else hiddenCols + c
     }
 
     fun newArray() {
         config = ArrayConfig()
         useAux = false
+        photoModeActive = false
         hasUnsavedChanges = true
     }
 
     fun load(uri: Uri): Boolean {
-        // 1) Пробуем ZIP
         val fromZip = repo.loadFromZip(uri)
         if (fromZip != null) {
             config = normalize(fromZip)
             useAux = false
+            photoModeActive = false
             pendingReconnect = emptyList()
             hasUnsavedChanges = false
             return true
         }
-        // 2) Фоллбэк — JSON
         val fromJson = repo.loadFromUri(uri) ?: return false
-        config = normalize(fromJson)   // миграция imageUri -> imageFile
+        config = normalize(fromJson)
         useAux = false
+        photoModeActive = false
         val missing = mutableListOf<Pair<Int, Int>>()
         fun collect(sub: SubArray) {
             sub.cells.forEach { (key, cell) ->
@@ -102,7 +104,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        collect(config.main); collect(config.aux);collect(config.photoArchive);collect(config.photoMain); collect(config.photoAux)
+        collect(config.main)
+        collect(config.aux)
+        collect(config.photoMain)
+        collect(config.photoAux)
         pendingReconnect = missing
         hasUnsavedChanges = false
         return true
@@ -133,6 +138,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val ok = repo.saveAsZip(config, uri)
         if (ok) hasUnsavedChanges = false
         return ok
+    }
+
+    fun savePhotoArchive(uri: Uri): Boolean {
+        val photoOnly = config.copy(main = SubArray(), aux = SubArray())
+        val ok = repo.saveAsZip(photoOnly, uri)
+        if (ok) hasUnsavedChanges = false
+        return ok
+    }
+
+    fun loadPhotoArchive(uri: Uri): Boolean {
+        val loaded = repo.loadFromZip(uri) ?: return false
+        config = config.copy(photoMain = loaded.photoMain, photoAux = loaded.photoAux)
+        hasUnsavedChanges = false
+        return true
+    }
+
+    fun generatePhotoReport(
+        selectedPins: Set<String>, from: Long, to: Long, uri: Uri
+    ): Boolean {
+        val mergedCells = LinkedHashMap<String, CellData>()
+        mergedCells.putAll(config.photoMain.cells)
+        mergedCells.putAll(config.photoAux.cells)
+        val merged = SubArray(
+            cells = mergedCells,
+            rowLabels = config.photoMain.rowLabels + config.photoAux.rowLabels,
+            colLabels = config.photoMain.colLabels + config.photoAux.colLabels
+        )
+        return repo.generatePhotoReport(merged, selectedPins, from, to, uri)
     }
 
     fun autosave() {
@@ -188,117 +221,86 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             })
         }
     }
-	
-	fun makeNested(sourceRow: Int, sourceCol: Int, targetRow: Int, targetCol: Int) {
-		if (sourceRow == targetRow && sourceCol == targetCol) return
-		val src = cell(sourceRow, sourceCol) ?: return
-		val tgt = cell(targetRow, targetCol) ?: return
-
-		// Сначала снимаем старое вложение target, если было
-		if (tgt.nestedRow >= 0 && tgt.nestedCol >= 0) {
-			updateCell(tgt.nestedRow, tgt.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
-		}
-		// Снимаем parent у source, если она уже была чьей-то подложкой
-		if (src.parentRow >= 0 && src.parentCol >= 0) {
-			updateCell(src.parentRow, src.parentCol) {
-				it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
-			}
-		}
-
-		updateCell(sourceRow, sourceCol) { it.copy(parentRow = targetRow, parentCol = targetCol) }
-		updateCell(targetRow, targetCol) {
-			it.copy(
-				nestedImageFile = src.imageFile,
-				nestedTitle = src.title,
-				nestedRow = sourceRow,
-				nestedCol = sourceCol
-			)
-		}
-		autosave()
-	}
-
-	fun removeNested(row: Int, col: Int) {
-		val c = cell(row, col) ?: return
-		if (c.nestedRow >= 0 && c.nestedCol >= 0) {
-			updateCell(c.nestedRow, c.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
-		}
-		if (c.parentRow >= 0 && c.parentCol >= 0) {
-			updateCell(c.parentRow, c.parentCol) {
-				it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
-			}
-		}
-		updateCell(row, col) {
-			it.copy(
-				parentRow = -1, parentCol = -1,
-				nestedImageFile = null, nestedTitle = "",
-				nestedRow = -1, nestedCol = -1
-			)
-		}
-		autosave()
-	}	
 
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)
         hasUnsavedChanges = true
     }
 
-	private fun updateActive(transform: (SubArray) -> SubArray) {
-		config = when {
-			photoModeActive && useAux -> config.copy(photoAux = transform(config.photoAux))
-			photoModeActive -> config.copy(photoMain = transform(config.photoMain))
-			useAux -> config.copy(aux = transform(config.aux))
-			else -> config.copy(main = transform(config.main))
-		}
-		hasUnsavedChanges = true
-	}
+    fun makeNested(sourceRow: Int, sourceCol: Int, targetRow: Int, targetCol: Int) {
+        if (sourceRow == targetRow && sourceCol == targetCol) return
+        val src = cell(sourceRow, sourceCol) ?: return
+        val tgt = cell(targetRow, targetCol) ?: return
 
-    /** Миграция imageUri -> imageFile + подтягивание размеров. */
+        if (tgt.nestedRow >= 0 && tgt.nestedCol >= 0) {
+            updateCell(tgt.nestedRow, tgt.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
+        }
+        if (src.parentRow >= 0 && src.parentCol >= 0) {
+            updateCell(src.parentRow, src.parentCol) {
+                it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
+            }
+        }
+
+        updateCell(sourceRow, sourceCol) { it.copy(parentRow = targetRow, parentCol = targetCol) }
+        updateCell(targetRow, targetCol) {
+            it.copy(
+                nestedImageFile = src.imageFile,
+                nestedTitle = src.title,
+                nestedRow = sourceRow,
+                nestedCol = sourceCol
+            )
+        }
+        autosave()
+    }
+
+    fun removeNested(row: Int, col: Int) {
+        val c = cell(row, col) ?: return
+        if (c.nestedRow >= 0 && c.nestedCol >= 0) {
+            updateCell(c.nestedRow, c.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
+        }
+        if (c.parentRow >= 0 && c.parentCol >= 0) {
+            updateCell(c.parentRow, c.parentCol) {
+                it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
+            }
+        }
+        updateCell(row, col) {
+            it.copy(
+                parentRow = -1, parentCol = -1,
+                nestedImageFile = null, nestedTitle = "",
+                nestedRow = -1, nestedCol = -1
+            )
+        }
+        autosave()
+    }
+
+    private fun updateActive(transform: (SubArray) -> SubArray) {
+        config = when {
+            photoModeActive && useAux -> config.copy(photoAux = transform(config.photoAux))
+            photoModeActive -> config.copy(photoMain = transform(config.photoMain))
+            useAux -> config.copy(aux = transform(config.aux))
+            else -> config.copy(main = transform(config.main))
+        }
+        hasUnsavedChanges = true
+    }
+
     private fun normalize(src: ArrayConfig): ArrayConfig {
         fun fixSub(sub: SubArray): SubArray = sub.copy(
             cells = sub.cells.mapValues { (_, cell) ->
-                when {
-                    cell.imageFile == null && cell.imageUri != null -> {
-                        val name = repo.importImage(Uri.parse(cell.imageUri))
-                        if (name != null) {
-                            val sz = repo.getImageSize(name)
-                            cell.copy(
-                                imageFile = name, imageUri = null,
-                                imageWidth = sz?.first ?: cell.imageWidth,
-                                imageHeight = sz?.second ?: cell.imageHeight
-                            )
-                        } else cell   // URI мёртв — оставляем как есть, попадёт в pendingReconnect
-                    }
-                    cell.imageFile != null && cell.imageWidth == 0 -> {
-                        val sz = repo.getImageSize(cell.imageFile)
-                        if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
-                    }
-                    else -> cell
-                }
+                val u = cell.imageUri ?: return@mapValues cell
+                if (cell.imageFile != null) return@mapValues cell
+                val parsed = Uri.parse(u)
+                repo.takePersistablePermission(parsed)
+                if (cell.imageWidth == 0) {
+                    val sz = repo.getImageSize(cell.imageFile ?: "")
+                    if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
+                } else cell
             }
         )
-		return src.copy(
-			main = fixSub(src.main),
-			aux = fixSub(src.aux),
-			photoMain = fixSub(src.photoMain),
-			photoAux = fixSub(src.photoAux)
-		)
+        return src.copy(
+            main = fixSub(src.main),
+            aux = fixSub(src.aux),
+            photoMain = fixSub(src.photoMain),
+            photoAux = fixSub(src.photoAux)
+        )
     }
-	
-	fun savePhotoArchive(uri: Uri): Boolean {
-		val photoOnly = config.copy(main = SubArray(), aux = SubArray())
-		val ok = repo.saveAsZip(photoOnly, uri)
-		if (ok) hasUnsavedChanges = false
-		return ok
-	}
-
-	fun loadPhotoArchive(uri: Uri): Boolean {
-		val loaded = repo.loadFromZip(uri) ?: return false
-		config = config.copy(photoMain = loaded.photoMain, photoAux = loaded.photoAux)
-		hasUnsavedChanges = false
-		return true
-	}
-
-	fun generatePhotoReport(
-		selectedPins: Set<String>, from: Long, to: Long, uri: Uri
-	): Boolean = repo.generatePhotoReport(config.photoArchive, selectedPins, from, to, uri)
 }

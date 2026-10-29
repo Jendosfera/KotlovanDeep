@@ -23,8 +23,6 @@ class ArrayRepository(private val context: Context) {
     private val prefs = context.getSharedPreferences("kotlovan_prefs", Context.MODE_PRIVATE)
     private val imagesDir = File(context.filesDir, "cell_images").apply { mkdirs() }
 
-    // ─────────── Изображения ячеек ───────────
-
     fun importImage(uri: Uri): String? {
         return try {
             val ext = context.contentResolver.getType(uri)?.substringAfterLast('/') ?: "jpg"
@@ -73,8 +71,6 @@ class ArrayRepository(private val context: Context) {
         context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
     } catch (_: Exception) { false }
 
-    // ─────────── Фото комментариев ───────────
-
     fun newPhotoName(): String =
         "photo_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.jpg"
 
@@ -89,9 +85,6 @@ class ArrayRepository(private val context: Context) {
         )
     }
 
-    // ─────────── ZIP ───────────
-
-    /** Сохраняет произвольный SubArray в ZIP (используется и для main, и для photoArchive). */
     fun saveSubArrayAsZip(sub: SubArray, uri: Uri): Boolean {
         return try {
             context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -147,8 +140,6 @@ class ArrayRepository(private val context: Context) {
         } catch (e: Exception) { Log.e("Kotlovan", "loadSubArrayFromZip", e); null }
     }
 
-    // ─────────── Основное сохранение/загрузка (main+aux+photoArchive) ───────────
-
     fun saveAsZip(config: ArrayConfig, uri: Uri): Boolean {
         return try {
             context.contentResolver.openOutputStream(uri)?.use { out ->
@@ -166,7 +157,10 @@ class ArrayRepository(private val context: Context) {
                             for (pin in cell.comments) for (ph in pin.photos) used += ph.file
                         }
                     }
-                    collect(config.main); collect(config.aux); collect(config.photoArchive)
+                    collect(config.main)
+                    collect(config.aux)
+                    collect(config.photoMain)
+                    collect(config.photoAux)
 
                     for (name in used) {
                         val f = File(imagesDir, name)
@@ -216,14 +210,6 @@ class ArrayRepository(private val context: Context) {
         } catch (e: Exception) { Log.e("Kotlovan", "loadFromUri", e); null }
     }
 
-    // ─────────── Фотоотчёт ───────────
-
-    /**
-     * @param archive фотоархив (SubArray)
-     * @param selectedPins набор id пинов, которые нужно включить
-     * @param from минимальная дата (мс) — фильтр по createdAt
-     * @param to   максимальная дата (мс)
-     */
     fun generatePhotoReport(
         archive: SubArray,
         selectedPins: Set<String>,
@@ -240,7 +226,6 @@ class ArrayRepository(private val context: Context) {
                 ZipOutputStream(out).use { zip ->
                     zip.setLevel(0)
 
-                    // группируем: row -> col -> список пинов
                     val grouped = LinkedHashMap<Int, LinkedHashMap<Int, MutableList<CommentPin>>>()
                     for ((key, cell) in archive.cells) {
                         val parts = key.split(",")
@@ -276,7 +261,6 @@ class ArrayRepository(private val context: Context) {
                                     .replace(Regex("[\\\\/:*?\"<>|]"), "_")
 
                                 if (pin.photos.isEmpty()) {
-                                    // Пишем README с текстом комментария
                                     zip.putNextEntry(ZipEntry("$colEntry$baseName.txt"))
                                     val txt = "Название: ${pin.title}\nРейтинг: ${pin.rating}\n" +
                                             "Текст: ${pin.text}\nДата: ${Date(pin.createdAt)}"
@@ -310,8 +294,6 @@ class ArrayRepository(private val context: Context) {
             true
         } catch (e: Exception) { Log.e("Kotlovan", "generatePhotoReport", e); false }
     }
-
-    // ─────────── Автосохранение ───────────
 
     fun autosave(config: ArrayConfig) {
         prefs.edit().putString("autosave", json.encodeToString(ArrayConfig.serializer(), config)).apply()
