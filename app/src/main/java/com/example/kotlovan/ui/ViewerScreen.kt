@@ -110,9 +110,10 @@ private val BlueColor = Color(0xFF1565C0)
 fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
     val cfg = vm.config
+
     var row by rememberSaveable { mutableIntStateOf(vm.active.lastRow) }
     var col by rememberSaveable { mutableIntStateOf(vm.active.lastCol) }
-	var depth by rememberSaveable { mutableIntStateOf(vm.active.lastDepth) }
+    var depth by rememberSaveable { mutableIntStateOf(vm.active.lastDepth) }
     var savedRow by rememberSaveable { mutableIntStateOf(-1) }
     var savedCol by rememberSaveable { mutableIntStateOf(-1) }
     var scale by rememberSaveable { mutableFloatStateOf(1f) }
@@ -175,8 +176,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val density = LocalDensity.current
 
         val maxDepth = vm.depthAt(row, col)
-		if (depth > maxDepth && maxDepth >= 0) depth = 0
-		val currentCell = vm.cell(row, col, depth)
+        if (maxDepth < 0) { row = vm.active.lastRow; col = vm.active.lastCol; depth = 0 }
+        if (depth > maxDepth && maxDepth >= 0) depth = 0
+
+        val currentCell = vm.cell(row, col, depth)
         val imageW = currentCell?.imageWidth ?: 0
         val imageH = currentCell?.imageHeight ?: 0
         val fitScale = if (imageW > 0 && imageH > 0) min(containerW / imageW, containerH / imageH) else 1f
@@ -186,38 +189,36 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
         val baseIconDp = 28.dp * cfg.iconSize
         val iconMod = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
 
-        val allRows = vm.active.cells.keys.map { it.substringBefore(',').toInt() }
-        val allCols = vm.active.cells.keys.map { it.substringAfter(',').toInt() }
+        val allRows = vm.active.cells.keys.mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }
+        val allCols = vm.active.cells.keys.mapNotNull { it.split(",").getOrNull(1)?.toIntOrNull() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
 
-        val rowColsList = vm.active.cells.keys
-            .mapNotNull { k ->
-                val p = k.split(",")
-                if (p.getOrNull(0)?.toIntOrNull() == row) p.getOrNull(1)?.toIntOrNull() else null
-            }.sorted()
-        val colRowsList = vm.active.cells.keys
-            .mapNotNull { k ->
-                val p = k.split(",")
-                if (p.getOrNull(1)?.toIntOrNull() == col) p.getOrNull(0)?.toIntOrNull() else null
-            }.sorted()
+        val rowColsList = vm.active.cells.keys.mapNotNull { k ->
+            val p = k.split(",")
+            if (p.getOrNull(0)?.toIntOrNull() == row) p.getOrNull(1)?.toIntOrNull() else null
+        }.distinct().sorted()
+        val colRowsList = vm.active.cells.keys.mapNotNull { k ->
+            val p = k.split(",")
+            if (p.getOrNull(1)?.toIntOrNull() == col) p.getOrNull(0)?.toIntOrNull() else null
+        }.distinct().sorted()
 
-		fun persistViewport() {
-			val c = vm.cell(row, col, depth) ?: return
-			val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
-			val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
-			if (c.ownPosition) {
-				vm.updateCell(row, col, depth) { it.copy(ownScale = scale, ownOffsetX = vOx, ownOffsetY = vOy) }
-			} else {
-				vm.setGlobalViewport(scale, vOx, vOy, row, col, depth)
-			}
-		}
+        fun persistViewport() {
+            val c = vm.cell(row, col, depth) ?: return
+            val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
+            val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
+            if (c.ownPosition) {
+                vm.updateCell(row, col, depth) { it.copy(ownScale = scale, ownOffsetX = vOx, ownOffsetY = vOy) }
+            } else {
+                vm.setGlobalViewport(scale, vOx, vOy, row, col, depth)
+            }
+        }
 
         fun returnFromLink() {
             val lr = vm.linkReturn ?: return
             vm.useAux = lr.isAux
             savedRow = lr.row; savedCol = lr.col
-            row = lr.row; col = lr.col
+            row = lr.row; col = lr.col; depth = 0
             scale = lr.scale
             offsetX = lr.offX; offsetY = lr.offY
             vm.linkReturn = null
@@ -233,7 +234,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
             vm.useAux = link.isAux
             savedRow = link.row; savedCol = link.col
-            row = link.row; col = link.col
+            row = link.row; col = link.col; depth = 0
             subMode = ViewerSubMode.VIEW
             pendingJump = PendingJump(link.x, link.y, link.scale)
         }
@@ -245,38 +246,38 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             jumpToLink(pj, lr.commentRow, lr.commentCol, lr.commentId, keepReturn = true)
         }
 
-		LaunchedEffect(row, col, depth, fitW, fitH, pendingJump, vm.useAux, vm.photoModeActive) {
-			val pj = pendingJump
-			if (pj != null) {
-				scale = pj.scale
-				offsetX = containerW / 2f - pj.x * fitW * pj.scale
-				offsetY = containerH / 2f - pj.y * fitH * pj.scale
-				pendingJump = null
-				savedRow = row; savedCol = col
-				swipeDir = SwipeDir.NONE
-				return@LaunchedEffect
-			}
-			if (row == savedRow && col == savedCol) return@LaunchedEffect
-			val c = vm.cell(row, col, depth) ?: return@LaunchedEffect
-			val (s, vOx, vOy) = if (c.ownPosition) {
-				Triple(c.ownScale, c.ownOffsetX, c.ownOffsetY)
-			} else {
-				Triple(vm.active.globalScale, vm.active.globalOffsetX, vm.active.globalOffsetY)
-			}
-			scale = s
-			offsetX = containerW / 2f + vOx - c.commonX * fitW * s
-			offsetY = containerH / 2f + vOy - c.commonY * fitH * s
-			val clamped = clampOffset(Offset(offsetX, offsetY), scale, fitW, fitH, containerW, containerH)
-			offsetX = clamped.x; offsetY = clamped.y
-			savedRow = row; savedCol = col
-			swipeDir = SwipeDir.NONE
-		}
+        LaunchedEffect(row, col, depth, fitW, fitH, pendingJump, vm.useAux, vm.photoModeActive) {
+            val pj = pendingJump
+            if (pj != null) {
+                scale = pj.scale
+                offsetX = containerW / 2f - pj.x * fitW * pj.scale
+                offsetY = containerH / 2f - pj.y * fitH * pj.scale
+                pendingJump = null
+                savedRow = row; savedCol = col
+                swipeDir = SwipeDir.NONE
+                return@LaunchedEffect
+            }
+            if (row == savedRow && col == savedCol) return@LaunchedEffect
+            val c = vm.cell(row, col, depth) ?: return@LaunchedEffect
+            val (s, vOx, vOy) = if (c.ownPosition) {
+                Triple(c.ownScale, c.ownOffsetX, c.ownOffsetY)
+            } else {
+                Triple(vm.active.globalScale, vm.active.globalOffsetX, vm.active.globalOffsetY)
+            }
+            scale = s
+            offsetX = containerW / 2f + vOx - c.commonX * fitW * s
+            offsetY = containerH / 2f + vOy - c.commonY * fitH * s
+            val clamped = clampOffset(Offset(offsetX, offsetY), scale, fitW, fitH, containerW, containerH)
+            offsetX = clamped.x; offsetY = clamped.y
+            savedRow = row; savedCol = col
+            swipeDir = SwipeDir.NONE
+        }
 
         val cornerPx = with(density) { 80.dp.toPx() }
 
         // Изображение
         AnimatedContent(
-            targetState = "$row,$col",
+            targetState = "$row,$col,$depth",
             transitionSpec = {
                 val inSpec: androidx.compose.animation.EnterTransition
                 val outSpec: androidx.compose.animation.ExitTransition
@@ -294,7 +295,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             val parts = key.split(",")
             val r = parts.getOrNull(0)?.toIntOrNull() ?: 0
             val c = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            val cell = vm.cell(r, c)
+            val d = parts.getOrNull(2)?.toIntOrNull() ?: 0
+            val cell = vm.cell(r, c, d)
             val imgFile = cell?.imageFile
             val w = cell?.imageWidth ?: 0
             val h = cell?.imageHeight ?: 0
@@ -316,10 +318,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
-        // Слой перехвата
+        // Жесты
         Box(
             Modifier.fillMaxSize().clipToBounds()
-                .pointerInput(row, col, subMode, fitW, fitH, inLinkMode, showAllRow, vm.photoModeActive) {
+                .pointerInput(row, col, depth, subMode, fitW, fitH, inLinkMode, showAllRow, vm.photoModeActive) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, Offset(offsetX, offsetY)) },
                         fitW = fitW, fitH = fitH,
@@ -363,7 +365,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 }
                                 if (nr != row || nc != col) {
                                     persistViewport()
-                                    swipeDir = dir; row = nr; col = nc
+                                    swipeDir = dir
+                                    row = nr; col = nc; depth = 0
                                 }
                             }
                         },
@@ -375,7 +378,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             if (hit != null) {
                                 val (hr, hc, pin) = hit
                                 if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
-                                else nav.navigate("comment/$hr/$hc/${pin.id}")
+                                else nav.navigate("comment/$hr/$hc/${pin.id}?depth=$depth")
                             }
                         },
                         onLongPress = { pos ->
@@ -384,7 +387,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 contextMenu = pos to emptyList()
                                 return@detectViewerGestures
                             }
-                            val cell = vm.cell(row, col) ?: return@detectViewerGestures
+                            val cell = vm.cell(row, col, depth) ?: return@detectViewerGestures
                             val visible = cell.comments.filter { pin ->
                                 val sx = pin.x * fitW * scale + offsetX
                                 val sy = pin.y * fitH * scale + offsetY
@@ -394,7 +397,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 val extra = mutableListOf<CommentPin>()
                                 for (c in colRange) {
                                     if (c == col) continue
-                                    val oc = vm.cell(row, c) ?: continue
+                                    val oc = vm.cell(row, c, 0) ?: continue
                                     extra += oc.comments
                                 }
                                 visible + extra
@@ -405,7 +408,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 }
         )
 
-        // Комментарии текущей ячейки
+        // Комментарии
         if (currentCell != null) {
             for (pin in currentCell.comments) {
                 CommentPinRender(
@@ -417,7 +420,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             if (showAllRow) {
                 for (c in colRange) {
                     if (c == col) continue
-                    val oc = vm.cell(row, c) ?: continue
+                    val oc = vm.cell(row, c, 0) ?: continue
                     for (pin in oc.comments) {
                         val dx = pin.x - oc.commonX
                         val dy = pin.y - oc.commonY
@@ -465,7 +468,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 vm.photoModeActive = !vm.photoModeActive
                                 savedRow = -1; savedCol = -1
                                 val t = vm.active
-                                row = t.lastRow; col = t.lastCol
+                                row = t.lastRow; col = t.lastCol; depth = 0
                                 pendingJump = null
                             },
                         contentAlignment = Alignment.Center
@@ -473,33 +476,32 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = photoTint,
                             modifier = Modifier.size(photoIconSize).alpha(cfg.iconOpacity))
                     }
+                    // Кнопка переключения слоя
+                    if (maxDepth > 0) {
+                        Spacer(Modifier.width(4.dp))
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape)
+                                .background(YellowColor)
+                                .border(5.dp, BlueColor, CircleShape)
+                                .clickable {
+                                    persistViewport()
+                                    depth = if (depth >= maxDepth) 0 else depth + 1
+                                    savedRow = -1; savedCol = -1
+                                    pendingJump = null
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Layers, "Слой $depth/$maxDepth", tint = BlueColor)
+                        }
+                    }
                     Spacer(Modifier.width(4.dp))
-                    val hasNested = (currentCell?.nestedRow ?: -1) >= 0
-                    val isNested = (currentCell?.parentRow ?: -1) >= 0
-					if (!inLinkMode && maxDepth > 0) {
-						Spacer(Modifier.width(4.dp))
-						Box(
-							Modifier.size(44.dp).clip(CircleShape)
-								.background(YellowColor)
-								.border(5.dp, BlueColor, CircleShape)
-								.clickable {
-									persistViewport()
-									depth = if (depth >= maxDepth) 0 else depth + 1
-									savedRow = -1; savedCol = -1
-									pendingJump = null
-								},
-							contentAlignment = Alignment.Center
-						) {
-							Icon(Icons.Default.Layers, "Слой $depth/$maxDepth", tint = BlueColor)
-						}
-					}
                     OutlinedIconButton(
                         onClick = {
                             persistViewport()
                             vm.useAux = !vm.useAux
                             val t = vm.active
                             savedRow = -1; savedCol = -1
-                            row = t.lastRow; col = t.lastCol
+                            row = t.lastRow; col = t.lastCol; depth = 0
                             pendingJump = null
                         },
                         icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
@@ -517,7 +519,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             val lr = vm.linkReturn!!
                             DropdownMenuItem(text = { Text("Изменить привязку") }, onClick = {
                                 menuOpen = false
-                                nav.navigate("linkpicker/${lr.commentRow}/${lr.commentCol}/${lr.commentId}")
+                                nav.navigate("linkpicker/${lr.commentRow}/${lr.commentCol}/${lr.commentId}?depth=0")
                             })
                         } else {
                             DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
@@ -531,7 +533,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                     val newOwn = !c.ownPosition
                                     val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
                                     val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
-                                    vm.updateCell(row, col) {
+                                    vm.updateCell(row, col, depth) {
                                         it.copy(ownPosition = newOwn,
                                             ownScale = if (newOwn) scale else it.ownScale,
                                             ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
@@ -559,12 +561,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     for (r in rowRange) {
-                        val isEmpty = vm.cell(r, col) == null
+                        val isEmpty = !vm.hasCell(r, col)
                         SideButton(
                             text = vm.active.rowLabels[r] ?: "R${r + 1}",
                             selected = (r == row), dimmed = isEmpty,
                             selectedColor = selectedColor,
-                            onClick = { if (!isEmpty) { persistViewport(); row = r } },
+                            onClick = { if (!isEmpty) { persistViewport(); row = r; depth = 0 } },
                             onLongClick = { labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" }
                         )
                     }
@@ -576,12 +578,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     for (c in colRange) {
-                        val isEmpty = vm.cell(row, c) == null
+                        val isEmpty = !vm.hasCell(row, c)
                         SideButton(
                             text = vm.active.colLabels[c] ?: "C${c + 1}",
                             selected = (c == col), dimmed = isEmpty,
                             selectedColor = selectedColor,
-                            onClick = { if (!isEmpty) { persistViewport(); col = c } },
+                            onClick = { if (!isEmpty) { persistViewport(); col = c; depth = 0 } },
                             onLongClick = { labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" }
                         )
                     }
@@ -603,6 +605,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
         }
 
+        // Общая точка
         if (subMode == ViewerSubMode.SET_COMMON_POINT) {
             CrosshairBlack(Modifier.align(Alignment.Center))
             OutlinedIconButton(
@@ -611,10 +614,10 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     val imgY = (containerH / 2f - offsetY) / scale
                     val nx = (imgX / fitW).coerceIn(0f, 1f)
                     val ny = (imgY / fitH).coerceIn(0f, 1f)
-                    vm.updateCell(row, col) { it.copy(commonX = nx, commonY = ny) }
+                    vm.updateCell(row, col, depth) { it.copy(commonX = nx, commonY = ny) }
                     if (currentCell?.ownPosition == true)
-                        vm.updateCell(row, col) { it.copy(ownOffsetX = 0f, ownOffsetY = 0f) }
-                    else vm.setGlobalViewport(scale, 0f, 0f, row, col)
+                        vm.updateCell(row, col, depth) { it.copy(ownOffsetX = 0f, ownOffsetY = 0f) }
+                    else vm.setGlobalViewport(scale, 0f, 0f, row, col, depth)
                     offsetX = containerW / 2f - nx * fitW * scale
                     offsetY = containerH / 2f - ny * fitH * scale
                     subMode = ViewerSubMode.VIEW
@@ -624,11 +627,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             )
         }
 
+        // Установка комментария
         if (subMode == ViewerSubMode.PLACE_COMMENT) {
             CrosshairBlack(Modifier.align(Alignment.Center))
             OutlinedIconButton(
                 onClick = {
-                    val cell = vm.cell(row, col)
+                    val cell = vm.cell(row, col, depth)
                     if (cell != null) {
                         val imgX = (containerW / 2f - offsetX) / scale
                         val imgY = (containerH / 2f - offsetY) / scale
@@ -638,12 +642,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                         val rad = (cr / (fitW * scale)).coerceIn(0.003f, 0.3f)
                         val id = UUID.randomUUID().toString()
                         val pin = CommentPin(id = id, x = nx, y = ny, radius = rad)
-                        vm.setComments(row, col, cell.comments + pin)
+                        vm.setComments(row, col, cell.comments + pin, depth)
                         subMode = ViewerSubMode.VIEW
                         if (vm.photoModeActive) {
-                            nav.navigate("comment/$row/$col/$id?autoCamera=true")
+                            nav.navigate("comment/$row/$col/$id?depth=$depth&autoCamera=true")
                         } else {
-                            nav.navigate("comment/$row/$col/$id")
+                            nav.navigate("comment/$row/$col/$id?depth=$depth")
                         }
                     }
                 },
