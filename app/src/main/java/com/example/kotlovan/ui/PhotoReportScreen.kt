@@ -72,16 +72,16 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
 		)
 	}
 
-    val allPins = remember(archive) {
-        val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
-        for ((k, cell) in archive.cells) {
-            val p = k.split(",")
-            val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-            val c = p.getOrNull(1)?.toIntOrNull() ?: continue
-            for (pin in cell.comments) list += (r to c) to pin
-        }
-        list
-    }
+	val allPins = remember(archive) {
+		val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
+		for ((k, cell) in archive.cells) {
+			val p = k.split(",")
+			val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+			val c = p.getOrNull(1)?.toIntOrNull() ?: continue
+			for (pin in cell.comments) list += (r to c) to pin
+		}
+		list
+	}
     val minDate = allPins.minOfOrNull { it.second.createdAt } ?: 0L
     val maxDate = allPins.maxOfOrNull { it.second.createdAt } ?: System.currentTimeMillis()
 

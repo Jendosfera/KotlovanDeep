@@ -51,19 +51,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
 
     init {
-        val loaded = repo.loadAutosave()
-        if (loaded != null) config = normalize(loaded)
+        repo.loadAutosave()?.let { config = normalize(it) }
     }
 
     fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
         themeProfile = profile
         themeRepo.save(profile)
     }
-
-    fun resetTheme() {
-        themeRepo.reset()
-        themeProfile = themeRepo.load()
-    }
+    fun resetTheme() { themeRepo.reset(); themeProfile = themeRepo.load() }
 
     fun toggleRowVisibility(r: Int) {
         hiddenRows = if (r in hiddenRows) hiddenRows - r else hiddenRows + r
@@ -74,8 +69,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newArray() {
         config = ArrayConfig()
-        useAux = false
-        photoModeActive = false
+        useAux = false; photoModeActive = false
         hasUnsavedChanges = true
     }
 
@@ -83,32 +77,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val fromZip = repo.loadFromZip(uri)
         if (fromZip != null) {
             config = normalize(fromZip)
-            useAux = false
-            photoModeActive = false
+            useAux = false; photoModeActive = false
             pendingReconnect = emptyList()
             hasUnsavedChanges = false
             return true
         }
         val fromJson = repo.loadFromUri(uri) ?: return false
         config = normalize(fromJson)
-        useAux = false
-        photoModeActive = false
-        val missing = mutableListOf<Pair<Int, Int>>()
-        fun collect(sub: SubArray) {
-            sub.cells.forEach { (key, cell) ->
-                if (cell.imageFile == null && cell.imageUri != null) {
-                    val parts = key.split(",")
-                    val r = parts.getOrNull(0)?.toIntOrNull() ?: return@forEach
-                    val cc = parts.getOrNull(1)?.toIntOrNull() ?: return@forEach
-                    if (r to cc !in missing) missing += r to cc
-                }
-            }
-        }
-        collect(config.main)
-        collect(config.aux)
-        collect(config.photoMain)
-        collect(config.photoAux)
-        pendingReconnect = missing
+        useAux = false; photoModeActive = false
+        pendingReconnect = emptyList()
         hasUnsavedChanges = false
         return true
     }
@@ -118,20 +95,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reconnectImage(r: Int, c: Int, uri: Uri) {
         val name = repo.importImage(uri) ?: return
         val sz = repo.getImageSize(name)
-        config = config.copy(
-            main = if (config.main.cell(r, c) != null) config.main.copy(
-                cells = config.main.cells + (config.main.key(r, c) to config.main.cell(r, c)!!.copy(
-                    imageFile = name, imageUri = null,
-                    imageWidth = sz?.first ?: 0, imageHeight = sz?.second ?: 0
-                ))
-            ) else config.main,
-            aux = if (config.aux.cell(r, c) != null) config.aux.copy(
-                cells = config.aux.cells + (config.aux.key(r, c) to config.aux.cell(r, c)!!.copy(
-                    imageFile = name, imageUri = null,
-                    imageWidth = sz?.first ?: 0, imageHeight = sz?.second ?: 0
-                ))
-            ) else config.aux
-        )
+        fun fixSub(sub: SubArray): SubArray {
+            val cur = sub.cell(r, c) ?: return sub
+            return sub.copy(cells = sub.cells + (sub.key(r, c) to cur.copy(
+                imageFile = name, imageUri = null,
+                imageWidth = sz?.first ?: 0, imageHeight = sz?.second ?: 0
+            )))
+        }
+        config = config.copy(main = fixSub(config.main), aux = fixSub(config.aux))
     }
 
     fun save(uri: Uri): Boolean {
@@ -154,9 +125,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    fun generatePhotoReport(
-        selectedPins: Set<String>, from: Long, to: Long, uri: Uri
-    ): Boolean {
+    fun generatePhotoReport(selectedPins: Set<String>, from: Long, to: Long, uri: Uri): Boolean {
         val mergedCells = LinkedHashMap<String, CellData>()
         mergedCells.putAll(config.photoMain.cells)
         mergedCells.putAll(config.photoAux.cells)
@@ -168,54 +137,71 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return repo.generatePhotoReport(merged, selectedPins, from, to, uri)
     }
 
-    fun autosave() {
-        repo.autosave(config)
-        hasUnsavedChanges = false
+    fun autosave() { repo.autosave(config); hasUnsavedChanges = false }
+
+    // === Ключевые методы ===
+
+    fun cell(r: Int, c: Int, d: Int = 0): CellData? = active.cell(r, c, d)
+    fun depthAt(r: Int, c: Int): Int = active.depthAt(r, c)
+    fun cellsAt(r: Int, c: Int): List<Pair<Int, CellData>> = active.cellsAt(r, c)
+    fun hasCell(r: Int, c: Int): Boolean = active.hasCell(r, c)
+
+    fun upsertCell(r: Int, c: Int, data: CellData, d: Int = 0) = updateActive {
+        it.copy(cells = it.cells + (it.key(r, c, d) to data))
     }
 
-    fun cell(r: Int, c: Int): CellData? = active.cell(r, c)
-
-    fun upsertCell(r: Int, c: Int, data: CellData) = updateActive {
-        it.copy(cells = it.cells + (it.key(r, c) to data))
+    fun removeCell(r: Int, c: Int, d: Int = 0) = updateActive { sub ->
+        val map = sub.cells.toMutableMap()
+        map.remove(sub.key(r, c, d))
+        // Сдвиг глубжестоящих
+        val deeper = map.keys.filter {
+            val p = it.split(",")
+            p.size == 3 && p[0].toIntOrNull() == r && p[1].toIntOrNull() == c &&
+                    (p[2].toIntOrNull() ?: 0) > d
+        }.sortedBy { it.split(",")[2].toIntOrNull() ?: 0 }
+        for (k in deeper) {
+            val p = k.split(",")
+            val dd = p[2].toIntOrNull() ?: 0
+            val v = map[k] ?: continue
+            map.remove(k)
+            map["${r},${c},${dd - 1}"] = v
+        }
+        sub.copy(cells = map)
     }
 
-    fun removeCell(r: Int, c: Int) = updateActive {
-        it.copy(cells = it.cells - it.key(r, c))
-    }
-
-    fun swapCells(r1: Int, c1: Int, r2: Int, c2: Int) = updateActive { sub ->
-        val a = sub.cell(r1, c1); val b = sub.cell(r2, c2)
-        val k1 = sub.key(r1, c1); val k2 = sub.key(r2, c2)
+    fun swapCells(r1: Int, c1: Int, d1: Int, r2: Int, c2: Int, d2: Int) = updateActive { sub ->
+        val a = sub.cell(r1, c1, d1); val b = sub.cell(r2, c2, d2)
+        val k1 = sub.key(r1, c1, d1); val k2 = sub.key(r2, c2, d2)
         val map = sub.cells.toMutableMap()
         if (b != null) map[k1] = b else map.remove(k1)
         if (a != null) map[k2] = a else map.remove(k2)
         sub.copy(cells = map)
     }
 
-    fun setGlobalViewport(scale: Float, vOx: Float, vOy: Float, r: Int, c: Int) = updateActive {
-        it.copy(globalScale = scale, globalOffsetX = vOx, globalOffsetY = vOy, lastRow = r, lastCol = c)
+    fun setGlobalViewport(scale: Float, vOx: Float, vOy: Float, r: Int, c: Int, d: Int) = updateActive {
+        it.copy(globalScale = scale, globalOffsetX = vOx, globalOffsetY = vOy,
+            lastRow = r, lastCol = c, lastDepth = d)
     }
 
-    fun updateCell(r: Int, c: Int, transform: (CellData) -> CellData) = updateActive { sub ->
-        val cur = sub.cell(r, c) ?: return@updateActive sub
-        sub.copy(cells = sub.cells + (sub.key(r, c) to transform(cur)))
+    fun updateCell(r: Int, c: Int, d: Int = 0, transform: (CellData) -> CellData) = updateActive { sub ->
+        val cur = sub.cell(r, c, d) ?: return@updateActive sub
+        sub.copy(cells = sub.cells + (sub.key(r, c, d) to transform(cur)))
     }
 
-    fun setComments(r: Int, c: Int, comments: List<CommentPin>) =
-        updateCell(r, c) { it.copy(comments = comments) }
+    fun setComments(r: Int, c: Int, comments: List<CommentPin>, d: Int = 0) =
+        updateCell(r, c, d) { it.copy(comments = comments) }
 
-    fun updateLastCell(r: Int, c: Int) = updateActive { it.copy(lastRow = r, lastCol = c) }
+    fun updateLastCell(r: Int, c: Int, d: Int = 0) = updateActive { it.copy(lastRow = r, lastCol = c, lastDepth = d) }
 
     fun setRowLabel(r: Int, label: String) = updateActive {
         it.copy(rowLabels = if (label.isBlank()) it.rowLabels - r else it.rowLabels + (r to label))
     }
-
     fun setColLabel(c: Int, label: String) = updateActive {
         it.copy(colLabels = if (label.isBlank()) it.colLabels - c else it.colLabels + (c to label))
     }
 
-    fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?) {
-        updateCell(r, c) { cell ->
+    fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?, d: Int = 0) {
+        updateCell(r, c, d) { cell ->
             cell.copy(comments = cell.comments.map {
                 if (it.id == id) it.copy(link = link) else it
             })
@@ -227,48 +213,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    fun makeNested(sourceRow: Int, sourceCol: Int, targetRow: Int, targetCol: Int) {
-        if (sourceRow == targetRow && sourceCol == targetCol) return
-        val src = cell(sourceRow, sourceCol) ?: return
-        val tgt = cell(targetRow, targetCol) ?: return
-
-        if (tgt.nestedRow >= 0 && tgt.nestedCol >= 0) {
-            updateCell(tgt.nestedRow, tgt.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
-        }
-        if (src.parentRow >= 0 && src.parentCol >= 0) {
-            updateCell(src.parentRow, src.parentCol) {
-                it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
+    /** Вкладывает (sr,sc,sd) под (tr,tc). Ячейка перемещается целиком, место освобождается. */
+    fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
+        if (sr == tr && sc == tc) return
+        val src = active.cell(sr, sc, sd) ?: return
+        val targetDepth = active.depthAt(tr, tc)
+        if (targetDepth < 0) return
+        val newDepth = targetDepth + 1
+        updateActive { sub ->
+            val map = sub.cells.toMutableMap()
+            map.remove(sub.key(sr, sc, sd))
+            // Сдвигаем всё, что было глубже target, на +1
+            val toShift = map.keys.filter {
+                val p = it.split(",")
+                p.size == 3 && p[0].toIntOrNull() == tr && p[1].toIntOrNull() == tc &&
+                        (p[2].toIntOrNull() ?: 0) >= newDepth
+            }.sortedByDescending { it.split(",")[2].toIntOrNull() ?: 0 }
+            for (k in toShift) {
+                val p = k.split(",")
+                val dd = p[2].toIntOrNull() ?: 0
+                val v = map[k] ?: continue
+                map.remove(k)
+                map["${tr},${tc},${dd + 1}"] = v
             }
-        }
-
-        updateCell(sourceRow, sourceCol) { it.copy(parentRow = targetRow, parentCol = targetCol) }
-        updateCell(targetRow, targetCol) {
-            it.copy(
-                nestedImageFile = src.imageFile,
-                nestedTitle = src.title,
-                nestedRow = sourceRow,
-                nestedCol = sourceCol
-            )
+            map[sub.key(tr, tc, newDepth)] = src
+            sub.copy(cells = map)
         }
         autosave()
     }
 
-    fun removeNested(row: Int, col: Int) {
-        val c = cell(row, col) ?: return
-        if (c.nestedRow >= 0 && c.nestedCol >= 0) {
-            updateCell(c.nestedRow, c.nestedCol) { it.copy(parentRow = -1, parentCol = -1) }
-        }
-        if (c.parentRow >= 0 && c.parentCol >= 0) {
-            updateCell(c.parentRow, c.parentCol) {
-                it.copy(nestedImageFile = null, nestedTitle = "", nestedRow = -1, nestedCol = -1)
-            }
-        }
-        updateCell(row, col) {
-            it.copy(
-                parentRow = -1, parentCol = -1,
-                nestedImageFile = null, nestedTitle = "",
-                nestedRow = -1, nestedCol = -1
-            )
+    /** Меняет местами вложенную (sr,sc,sd) с её родителем — перестановка по глубине. */
+    fun unnest(sr: Int, sc: Int, sd: Int) {
+        if (sd <= 0) return
+        val parentDepth = sd - 1
+        val child = active.cell(sr, sc, sd) ?: return
+        val parent = active.cell(sr, sc, parentDepth) ?: return
+        updateActive { sub ->
+            val map = sub.cells.toMutableMap()
+            map[sub.key(sr, sc, sd)] = parent
+            map[sub.key(sr, sc, parentDepth)] = child
+            sub.copy(cells = map)
         }
         autosave()
     }
@@ -283,19 +267,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
+    private fun migrateSub(sub: SubArray): SubArray {
+        val newCells = LinkedHashMap<String, CellData>()
+        for ((k, v) in sub.cells) {
+            val p = k.split(",")
+            val newKey = when (p.size) {
+                2 -> "${p[0]},${p[1]},0"
+                3 -> k
+                else -> continue
+            }
+            newCells[newKey] = v
+        }
+        return sub.copy(cells = newCells)
+    }
+
     private fun normalize(src: ArrayConfig): ArrayConfig {
-        fun fixSub(sub: SubArray): SubArray = sub.copy(
-            cells = sub.cells.mapValues { (_, cell) ->
-                val u = cell.imageUri ?: return@mapValues cell
-                if (cell.imageFile != null) return@mapValues cell
-                val parsed = Uri.parse(u)
-                repo.takePersistablePermission(parsed)
-                if (cell.imageWidth == 0) {
-                    val sz = repo.getImageSize(cell.imageFile ?: "")
+        fun fixSub(sub0: SubArray): SubArray {
+            val sub = migrateSub(sub0)
+            return sub.copy(cells = sub.cells.mapValues { (_, cell) ->
+                if (cell.imageFile != null && cell.imageWidth == 0) {
+                    val sz = repo.getImageSize(cell.imageFile)
                     if (sz != null) cell.copy(imageWidth = sz.first, imageHeight = sz.second) else cell
                 } else cell
-            }
-        )
+            })
+        }
         return src.copy(
             main = fixSub(src.main),
             aux = fixSub(src.aux),

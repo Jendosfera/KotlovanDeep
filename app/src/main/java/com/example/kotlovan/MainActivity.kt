@@ -65,19 +65,21 @@ fun RootNav() {
             composable("viewer") { ViewerScreen(nav, vm) }
 
 			composable(
-				route = "comment/{row}/{col}/{id}?autoCamera={autoCamera}",
+				route = "comment/{row}/{col}/{id}?depth={depth}&autoCamera={autoCamera}",
 				arguments = listOf(
 					navArgument("row") { type = NavType.IntType },
 					navArgument("col") { type = NavType.IntType },
 					navArgument("id") { type = NavType.StringType },
+					navArgument("depth") { type = NavType.IntType; defaultValue = 0 },
 					navArgument("autoCamera") { type = NavType.BoolType; defaultValue = false }
 				)
 			) { back ->
 				val row = back.arguments?.getInt("row") ?: 0
 				val col = back.arguments?.getInt("col") ?: 0
 				val id = back.arguments?.getString("id") ?: ""
+				val depth = back.arguments?.getInt("depth") ?: 0
 				val autoCamera = back.arguments?.getBoolean("autoCamera") ?: false
-				CommentEditorScreen(nav, vm, row, col, id, autoCamera)
+				CommentEditorScreen(nav, vm, row, col, id, depth, autoCamera)
 			}
 			
 			composable("photoreport") { PhotoReportScreen(nav, vm) }

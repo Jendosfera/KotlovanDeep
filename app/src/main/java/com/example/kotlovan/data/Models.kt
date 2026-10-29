@@ -55,13 +55,23 @@ data class CellData(
     val commonY: Float = 0.5f,
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
-    val ownOffsetY: Float = 0f,
-    val parentRow: Int = -1,
-    val parentCol: Int = -1,
-    val nestedImageFile: String? = null,
-    val nestedTitle: String = "",
-    val nestedRow: Int = -1,
-    val nestedCol: Int = -1
+    val ownOffsetY: Float = 0f
+)
+
+@Serializable
+data class CellData(
+    val title: String = "",
+    val imageFile: String? = null,
+    val imageUri: String? = null,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0,
+    val comments: List<CommentPin> = emptyList(),
+    val ownPosition: Boolean = false,
+    val commonX: Float = 0.5f,
+    val commonY: Float = 0.5f,
+    val ownScale: Float = 1f,
+    val ownOffsetX: Float = 0f,
+    val ownOffsetY: Float = 0f
 )
 
 @Serializable
@@ -72,11 +82,50 @@ data class SubArray(
     val globalOffsetY: Float = 0f,
     val lastRow: Int = 0,
     val lastCol: Int = 0,
+    val lastDepth: Int = 0,
     val rowLabels: Map<Int, String> = emptyMap(),
     val colLabels: Map<Int, String> = emptyMap()
 ) {
-    fun key(r: Int, c: Int) = "$r,$c"
-    fun cell(r: Int, c: Int): CellData? = cells[key(r, c)]
+    fun key(r: Int, c: Int, d: Int = 0) = "$r,$c,$d"
+    fun cell(r: Int, c: Int, d: Int = 0): CellData? = cells[key(r, c, d)]
+
+    fun depthAt(r: Int, c: Int): Int {
+        var maxD = -1
+        for (k in cells.keys) {
+            val p = k.split(",")
+            if (p.size == 3 && p[0].toIntOrNull() == r && p[1].toIntOrNull() == c) {
+                val d = p[2].toIntOrNull() ?: 0
+                if (d > maxD) maxD = d
+            }
+        }
+        return maxD
+    }
+
+    fun hasCell(r: Int, c: Int): Boolean = depthAt(r, c) >= 0
+
+    fun cellsAt(r: Int, c: Int): List<Pair<Int, CellData>> {
+        val result = mutableListOf<Pair<Int, CellData>>()
+        for ((k, v) in cells) {
+            val p = k.split(",")
+            if (p.size == 3 && p[0].toIntOrNull() == r && p[1].toIntOrNull() == c) {
+                result += (p[2].toIntOrNull() ?: 0) to v
+            }
+        }
+        return result.sortedBy { it.first }
+    }
+
+    fun allCoords(): Set<Pair<Int, Int>> {
+        val s = mutableSetOf<Pair<Int, Int>>()
+        for (k in cells.keys) {
+            val p = k.split(",")
+            if (p.size == 3) {
+                val r = p[0].toIntOrNull() ?: continue
+                val c = p[1].toIntOrNull() ?: continue
+                s += r to c
+            }
+        }
+        return s
+    }
 }
 
 @Serializable

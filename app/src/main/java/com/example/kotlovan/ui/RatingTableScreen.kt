@@ -46,7 +46,7 @@ import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.vm.AppViewModel
 
 private data class RatingRow(
-    val pin: CommentPin, val row: Int, val col: Int, val isAux: Boolean
+    val pin: CommentPin, val row: Int, val col: Int, val depth: Int, val isAux: Boolean
 )
 
 @Composable
@@ -66,7 +66,8 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
 				val p = k.split(",")
 				val r = p.getOrNull(0)?.toIntOrNull() ?: continue
 				val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
-				for (pin in c.comments) list += RatingRow(pin, r, cc, isAux)
+				val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
+				for (pin in c.comments) list += RatingRow(pin, r, cc, dd, isAux)
 			}
 		}
 		if (vm.photoModeActive) {
@@ -131,7 +132,7 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                                 detectTapGestures(onDoubleTap = {
                                     vm.lastRatingRow = idx
                                     vm.useAux = r.isAux
-                                    nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}")
+                                    nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}/?depth=${r.depth}")
                                 })
                             }
                         ) {
@@ -200,7 +201,7 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
 
     if (showRowsDialog) {
         val allRows = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
-            .mapNotNull { it.substringBefore(',').toIntOrNull() }.distinct().sorted()
+            .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }.distinct().sorted()
         AlertDialog(
             onDismissRequest = { showRowsDialog = false },
             containerColor = yellow,
@@ -224,7 +225,7 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
 
     if (showColsDialog) {
         val allCols = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
-            .mapNotNull { it.substringAfter(',').toIntOrNull() }.distinct().sorted()
+            .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }.distinct().sorted()
         AlertDialog(
             onDismissRequest = { showColsDialog = false },
             containerColor = yellow,

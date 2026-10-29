@@ -55,16 +55,19 @@ private val Yellow = Color(0xFFFFEB3B)
 private val Blue = Color(0xFF1565C0)
 
 @Composable
-fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int) {
-    val existing = vm.cell(row, col)
-    val hasParent = (existing?.parentRow ?: -1) >= 0
-    val hasNested = (existing?.nestedRow ?: -1) >= 0
+fun CellCardScreen(
+    nav: NavHostController, vm: AppViewModel,
+    row: Int, col: Int, depth: Int = 0
+) {
+    val existing = vm.cell(row, col, depth)
+    val maxDepth = vm.depthAt(row, col)
+    val hasStack = maxDepth > 0
 
-    var title by remember { mutableStateOf(existing?.title ?: "") }
-    var titleTouched by remember { mutableStateOf(!existing?.title.isNullOrBlank()) }
-    var imageFile by remember { mutableStateOf(existing?.imageFile) }
-    var imgW by remember { mutableIntStateOf(existing?.imageWidth ?: 0) }
-    var imgH by remember { mutableIntStateOf(existing?.imageHeight ?: 0) }
+    var title by remember(depth) { mutableStateOf(existing?.title ?: "") }
+    var titleTouched by remember(depth) { mutableStateOf(!existing?.title.isNullOrBlank()) }
+    var imageFile by remember(depth) { mutableStateOf(existing?.imageFile) }
+    var imgW by remember(depth) { mutableIntStateOf(existing?.imageWidth ?: 0) }
+    var imgH by remember(depth) { mutableIntStateOf(existing?.imageHeight ?: 0) }
 
     val pickLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -79,23 +82,23 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) {
                 Icon(Icons.Default.ArrowBack, "Назад")
             }
-            Text("Ячейка [$row,$col]", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Ячейка [$row,$col${if (depth > 0) ",d=$depth" else ""}]",
+                style = MaterialTheme.typography.titleLarge
+            )
             Spacer(Modifier.weight(1f))
             IconButton(onClick = {
-                vm.removeCell(row, col)
+                vm.removeCell(row, col, depth)
                 vm.autosave()
                 nav.popBackStack()
-            }) { Icon(Icons.Default.Delete, "Удалить ячейку", tint = Color(0xFFD32F2F)) }
+            }) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
         }
 
         Spacer(Modifier.height(12.dp))
-
-        // Контейнер названия (жёлтый + синяя кайма)
         Box(
             Modifier.fillMaxWidth()
                 .background(Yellow, RoundedCornerShape(8.dp))
@@ -103,40 +106,59 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                 .padding(4.dp)
         ) {
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it; titleTouched = true },
-                label = { Text("Название") },
-                modifier = Modifier.fillMaxWidth()
+                value = title, onValueChange = { title = it; titleTouched = true },
+                label = { Text("Название") }, modifier = Modifier.fillMaxWidth()
             )
         }
 
-        // Кнопки вложения
-        if (hasParent || hasNested) {
+        // Переключение между d-слоями
+        if (hasStack) {
             Spacer(Modifier.height(8.dp))
+            val dLabel = if (maxDepth > 0)
+                "Вложенная ячейка (${depth}/${maxDepth})" else ""
             Button(
                 onClick = {
-                    val targetRow = if (hasNested) existing!!.nestedRow else existing!!.parentRow
-                    val targetCol = if (hasNested) existing!!.nestedCol else existing!!.parentCol
-                    nav.navigate("card/$targetRow/$targetCol") {
-                        popUpTo("card/$row/$col") { inclusive = true }
+                    val next = if (depth >= maxDepth) 0 else depth + 1
+                    nav.navigate("card/$row/$col?depth=$next") {
+                        popUpTo("card/$row/$col?depth=$depth") { inclusive = true }
                     }
                 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Yellow, contentColor = Blue
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
                 border = BorderStroke(7.dp, Blue),
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 Icon(Icons.Default.Layers, null)
                 Spacer(Modifier.size(6.dp))
-                Text(if (hasNested) "Перейти к вложенной" else "Перейти к главной")
+                Text(dLabel)
             }
         }
-        if (hasNested) {
+
+        // Сделать вложенной (только для d=0 и если нет вложений)
+        if (depth == 0 && maxDepth <= 0) {
             Spacer(Modifier.height(6.dp))
             Button(
                 onClick = {
-                    vm.removeNested(row, col)
+                    val base = existing ?: CellData()
+                    vm.upsertCell(row, col, base.copy(
+                        title = title, imageFile = imageFile, imageUri = null,
+                        imageWidth = imgW, imageHeight = imgH
+                    ), 0)
+                    vm.autosave()
+                    nav.navigate("builder?aux=${vm.useAux}&selectForNested=$row,$col,0")
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
+                border = BorderStroke(7.dp, Blue),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Сделать вложенной") }
+        }
+
+        // Отделить от родителя (для d>0)
+        if (depth > 0) {
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = {
+                    vm.unnest(row, col, depth)
+                    vm.autosave()
                     nav.popBackStack()
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -144,39 +166,12 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                 ),
                 border = BorderStroke(7.dp, Color.Black),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Убрать вложение") }
-        } else if (!hasParent) {
-            Spacer(Modifier.height(6.dp))
-            Button(
-                onClick = {
-                    // Сначала сохраняем текущее состояние в модели, чтобы при
-                    // возврате из builder данные были актуальны
-                    val base = existing ?: CellData().let {
-                        if (vm.useAux) it.copy(ownPosition = true) else it
-                    }
-                    vm.upsertCell(row, col, base.copy(
-                        title = title, imageFile = imageFile, imageUri = null,
-                        imageWidth = imgW, imageHeight = imgH
-                    ))
-                    vm.autosave()
-                    nav.navigate("builder?aux=${vm.useAux}&selectForNested=$row,$col")
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Yellow, contentColor = Blue
-                ),
-                border = BorderStroke(7.dp, Blue),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Сделать вложенной") }
+            ) { Text("Отделить от родителя") }
         }
 
         Spacer(Modifier.height(16.dp))
-
-        // Контейнер изображения
         Box(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
+            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFECEFF1))
                 .pointerInput(imageFile) {
                     detectTapGestures(
@@ -188,36 +183,28 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
         ) {
             val f = imageFile
             if (f != null) {
-                AsyncImage(
-                    model = vm.repo.imageFile(f),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
-                )
+                AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
+                    contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
             } else {
                 Canvas(Modifier.size(120.dp)) {
                     val r = size.minDimension * 0.4f
                     val c = center
                     drawCircle(
                         color = Color.Gray, radius = r, center = c,
-                        style = Stroke(
-                            width = 3.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
-                        )
+                        style = Stroke(width = 3.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f))
                     )
                     val plus = r * 0.5f
                     val sw = 3.dp.toPx()
                     drawLine(Color.Gray, c + Offset(-plus, 0f), c + Offset(plus, 0f), sw)
                     drawLine(Color.Gray, c + Offset(0f, -plus), c + Offset(0f, plus), sw)
                 }
-                Text(
-                    "Однократный тап — загрузить\nДвойной — заменить",
-                    color = Color.Gray,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
-                )
+                Text("Однократный тап — загрузить\nДвойной — заменить",
+                    color = Color.Gray, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
             }
         }
+
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
@@ -228,7 +215,8 @@ fun CellCardScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int)
                     vm.upsertCell(row, col, base.copy(
                         title = title, imageFile = imageFile, imageUri = null,
                         imageWidth = imgW, imageHeight = imgH
-                    ))
+                    ), depth)
+                    vm.updateLastCell(row, col, depth)
                     vm.autosave()
                     nav.popBackStack()
                 },

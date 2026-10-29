@@ -98,8 +98,8 @@ private val PresetColors = listOf(
 )
 
 @Composable
-fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int, id: String,autoCamera: Boolean = false) {
-    val cell = vm.cell(row, col) ?: return
+fun CommentEditorScreen(nav: NavHostController, vm: AppViewModel, row: Int, col: Int, id: String, depth: Int = 0, autoCamera: Boolean = false) {
+    val cell = vm.cell(row, col, depth) ?: return
     val pin = cell.comments.firstOrNull { it.id == id } ?: return
     val ctx = LocalContext.current
 
