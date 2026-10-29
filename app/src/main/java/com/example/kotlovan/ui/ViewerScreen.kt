@@ -757,7 +757,7 @@ private fun findPinAt2(
     pos: Offset, fitW: Float, fitH: Float, scale: Float, offset: Offset,
     vm: AppViewModel
 ): Triple<Int, Int, CommentPin>? {
-    val currentCell = vm.cell(currentRow, currentCol) ?: return null
+    val currentCell = vm.cell(currentRow, currentCol, 0) ?: return null
     for (pin in currentCell.comments.reversed()) {
         val cx = pin.x * fitW * scale + offset.x
         val cy = pin.y * fitH * scale + offset.y

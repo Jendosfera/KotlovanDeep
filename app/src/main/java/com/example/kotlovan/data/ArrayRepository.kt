@@ -97,7 +97,7 @@ class ArrayRepository(private val context: Context) {
                     val used = LinkedHashSet<String>()
                     for ((_, cell) in sub.cells) {
                         cell.imageFile?.let { used += it }
-                        cell.nestedImageFile?.let { used += it }
+                        
                         for (pin in cell.comments) for (ph in pin.photos) used += ph.file
                     }
                     for (name in used) {
@@ -153,7 +153,7 @@ class ArrayRepository(private val context: Context) {
                     fun collect(sub: SubArray) {
                         for ((_, cell) in sub.cells) {
                             cell.imageFile?.let { used += it }
-                            cell.nestedImageFile?.let { used += it }
+                            
                             for (pin in cell.comments) for (ph in pin.photos) used += ph.file
                         }
                     }

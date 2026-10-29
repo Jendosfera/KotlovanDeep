@@ -59,22 +59,6 @@ data class CellData(
 )
 
 @Serializable
-data class CellData(
-    val title: String = "",
-    val imageFile: String? = null,
-    val imageUri: String? = null,
-    val imageWidth: Int = 0,
-    val imageHeight: Int = 0,
-    val comments: List<CommentPin> = emptyList(),
-    val ownPosition: Boolean = false,
-    val commonX: Float = 0.5f,
-    val commonY: Float = 0.5f,
-    val ownScale: Float = 1f,
-    val ownOffsetX: Float = 0f,
-    val ownOffsetY: Float = 0f
-)
-
-@Serializable
 data class SubArray(
     val cells: Map<String, CellData> = emptyMap(),
     val globalScale: Float = 1f,
