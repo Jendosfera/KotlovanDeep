@@ -371,7 +371,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                             if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
                             val inCorner = pos.x > containerW - cornerPx && pos.y > containerH - cornerPx
                             if (inCorner) { iconsHidden = !iconsHidden; return@detectViewerGestures }
-                            val hit = findPinAt2(row, col, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
+                            val hit = findPinAt2(row, col, depth, showAllRow, pos, fitW, fitH, scale, Offset(offsetX, offsetY), vm)
                             if (hit != null) {
                                 val (hr, hc, pin) = hit
                                 if (pin.link != null) jumpToLink(pin.link, hr, hc, pin.id)
@@ -753,11 +753,11 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 }
 
 private fun findPinAt2(
-    currentRow: Int, currentCol: Int, showAllRow: Boolean,
+    currentRow: Int, currentCol: Int, currentDepth: Int, showAllRow: Boolean,
     pos: Offset, fitW: Float, fitH: Float, scale: Float, offset: Offset,
     vm: AppViewModel
 ): Triple<Int, Int, CommentPin>? {
-    val currentCell = vm.cell(currentRow, currentCol, 0) ?: return null
+    val currentCell = vm.cell(currentRow, currentCol, currentDepth) ?: return null
     for (pin in currentCell.comments.reversed()) {
         val cx = pin.x * fitW * scale + offset.x
         val cy = pin.y * fitH * scale + offset.y
@@ -769,10 +769,10 @@ private fun findPinAt2(
         val cols = vm.active.cells.keys.mapNotNull { k ->
             val p = k.split(",")
             if (p.getOrNull(0)?.toIntOrNull() == currentRow) p.getOrNull(1)?.toIntOrNull() else null
-        }.sorted()
+        }.distinct().sorted()
         for (c in cols) {
             if (c == currentCol) continue
-            val oc = vm.cell(currentRow, c) ?: continue
+            val oc = vm.cell(currentRow, c, 0) ?: continue
             for (pin in oc.comments.reversed()) {
                 val dx = pin.x - oc.commonX
                 val dy = pin.y - oc.commonY
