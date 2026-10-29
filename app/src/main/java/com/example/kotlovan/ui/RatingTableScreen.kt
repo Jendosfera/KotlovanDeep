@@ -55,20 +55,29 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     val blue = Color(0xFF1565C0)
 
     // Собираем все комментарии
-    val rows = remember(vm.config.main.cells, vm.config.aux.cells) {
-        val list = mutableListOf<RatingRow>()
-        fun collect(cells: Map<String, com.example.kotlovan.data.CellData>, isAux: Boolean) {
-            for ((k, c) in cells) {
-                val p = k.split(",")
-                val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-                val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
-                for (pin in c.comments) list += RatingRow(pin, r, cc, isAux)
-            }
-        }
-        collect(vm.config.main.cells, false)
-        collect(vm.config.aux.cells, true)
-        list.sortedByDescending { it.pin.rating }
-    }
+	val rows = remember(
+		vm.config.main.cells, vm.config.aux.cells,
+		vm.config.photoMain.cells, vm.config.photoAux.cells,
+		vm.photoModeActive
+	) {
+		val list = mutableListOf<RatingRow>()
+		fun collect(cells: Map<String, com.example.kotlovan.data.CellData>, isAux: Boolean) {
+			for ((k, c) in cells) {
+				val p = k.split(",")
+				val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+				val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
+				for (pin in c.comments) list += RatingRow(pin, r, cc, isAux)
+			}
+		}
+		if (vm.photoModeActive) {
+			collect(vm.config.photoMain.cells, false)
+			collect(vm.config.photoAux.cells, true)
+		} else {
+			collect(vm.config.main.cells, false)
+			collect(vm.config.aux.cells, true)
+		}
+		list.sortedByDescending { it.pin.rating }
+	}
 
     val listState = rememberLazyListState()
     LaunchedEffect(vm.lastRatingRow) {

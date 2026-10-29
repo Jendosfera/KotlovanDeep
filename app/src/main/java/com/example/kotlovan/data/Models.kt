@@ -84,7 +84,8 @@ data class ArrayConfig(
     val name: String = "Массив",
     val main: SubArray = SubArray(),
     val aux: SubArray = SubArray(),
-    val photoArchive: SubArray = SubArray(),
+    val photoMain: SubArray = SubArray(),   // ← заменяет photoArchive
+    val photoAux: SubArray = SubArray(),    // ← новое
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )

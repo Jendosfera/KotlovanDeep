@@ -109,7 +109,7 @@ suspend fun PointerInputScope.detectViewerGestures(
                 val dy = ch.positionChange().y
                 val vp = getViewport()
 
-                if (vp.scale > 1.05f) {
+                if (alwaysPanOneFinger || vp.scale > 1.05f) {
                     // При увеличении один палец = панорамирование
                     if (abs(dx) > 0.5f || abs(dy) > 0.5f) {
                         didPan = true
@@ -180,4 +180,32 @@ fun clampOffset(
         ox.coerceIn(safeMinX, safeMaxX),
         oy.coerceIn(safeMinY, safeMaxY)
     )
+}
+suspend fun PointerInputScope.detectViewerGestures(
+    getViewport: () -> Viewport,
+    fitW: Float, fitH: Float,
+    containerW: Float, containerH: Float,
+    onTransform: (Viewport) -> Unit,
+    onSwipe: (dx: Float, dy: Float) -> Unit,
+    onTap: (Offset) -> Unit = {},
+    onLongPress: (Offset) -> Unit = {},
+    swipeThreshold: Float = 80f,
+    tapThreshold: Float = 20f,
+    longPressMs: Long = 500L,
+    minScale: Float = 0.3f,
+    maxScale: Float = 12f,
+    alwaysPanOneFinger: Boolean = false   // ← НОВОЕ
+) {
+    // ...
+    // в блоке else if (pressed.size == 1 && !isTransform) { ... }
+    // заменить условие:
+    if (alwaysPanOneFinger || vp.scale > 1.05f) {
+        // панорамирование одним пальцем
+        ...
+    } else {
+        // свайп (накапливаем sumDx/sumDy)
+        sumDx += dx
+        sumDy += dy
+    }
+    // ...
 }

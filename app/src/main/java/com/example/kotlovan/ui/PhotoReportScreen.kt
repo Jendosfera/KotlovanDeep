@@ -60,7 +60,17 @@ private val Red = Color(0xFFF44336)
 @Composable
 fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
-    val archive = vm.config.photoArchive
+    val archive = remember(vm.config.photoMain, vm.config.photoAux) {
+		// Объединяем photoMain и photoAux в один SubArray для отчёта
+		val mergedCells = LinkedHashMap<String, com.example.kotlovan.data.CellData>()
+		mergedCells.putAll(vm.config.photoMain.cells)
+		mergedCells.putAll(vm.config.photoAux.cells)
+		com.example.kotlovan.data.SubArray(
+			cells = mergedCells,
+			rowLabels = vm.config.photoMain.rowLabels + vm.config.photoAux.rowLabels,
+			colLabels = vm.config.photoMain.colLabels + vm.config.photoAux.colLabels
+		)
+	}
 
     val allPins = remember(archive) {
         val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,7 +76,6 @@ fun ArrayBuilderScreen(
     aux: Boolean,
     selectForNested: String = ""
 ) {
-    // Парсим selectForNested = "row,col"
     val nestedParts = selectForNested.split(",")
     val nestedRow = nestedParts.getOrNull(0)?.toIntOrNull() ?: -1
     val nestedCol = nestedParts.getOrNull(1)?.toIntOrNull() ?: -1
@@ -94,6 +92,11 @@ fun ArrayBuilderScreen(
     var selectedForSwap by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var showNameDialog by remember { mutableStateOf(false) }
     var fileName by remember { mutableStateOf("array.zip") }
+    // Локальное "текущее выделение" — не путать с vm.lastRow/lastCol
+    var localCurrent by remember(aux) { mutableStateOf<Pair<Int, Int>?>(null) }
+    // Запоминаем последний lastRow/lastCol, на котором центрировали
+    var centeredOnRow by remember(aux) { mutableStateOf(-999) }
+    var centeredOnCol by remember(aux) { mutableStateOf(-999) }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
@@ -120,7 +123,7 @@ fun ArrayBuilderScreen(
             if (cells.isEmpty()) intArrayOf(0, 0, 0, 0)
             else {
                 val rows = cells.keys.map { it.substringBefore(',').toInt() }
-                val cols = cells.keys.map { it.substringAfter(',').toInt() }
+                val cols = cells.keys.map { it.substringAfter(',').substringBefore(',').toInt() }
                 intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
             }
         }
@@ -132,10 +135,14 @@ fun ArrayBuilderScreen(
         val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
         val step = cellSizePx + cellGapPx
-        val totalW = (cTo - cFrom + 1) * step - cellGapPx
-        val totalH = (rTo - rFrom + 1) * step - cellGapPx
 
+        // Центрирование: только при первом входе и при возврате из карточки
+        // (когда lastRow/lastCol изменились в модели, а не в результате клика)
         LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol) {
+            if (centeredOnRow == vm.active.lastRow && centeredOnCol == vm.active.lastCol) return@LaunchedEffect
+            centeredOnRow = vm.active.lastRow
+            centeredOnCol = vm.active.lastCol
+            localCurrent = vm.active.lastRow to vm.active.lastCol
             val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
             val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
             offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
@@ -143,14 +150,15 @@ fun ArrayBuilderScreen(
 
         Box(
             Modifier.fillMaxSize()
-                .pointerInput(totalW, totalH, containerW, containerH) {
+                .pointerInput(Unit) {
                     detectViewerGestures(
                         getViewport = { Viewport(scale, offset) },
-                        fitW = totalW, fitH = totalH,
+                        fitW = 0f, fitH = 0f,
                         containerW = containerW, containerH = containerH,
                         onTransform = { vp -> scale = vp.scale; offset = vp.offset },
                         onSwipe = { _, _ -> },
-                        minScale = 0.2f, maxScale = 5f
+                        minScale = 0.2f, maxScale = 5f,
+                        alwaysPanOneFinger = true      // ← ключевое
                     )
                 }
         ) {
@@ -167,8 +175,7 @@ fun ArrayBuilderScreen(
                     val yPx = (r - rFrom) * step
                     val isPlus = data == null && hasNeighbor(r, c, cells)
                     val isEmptyStart = data == null && cells.isEmpty() && r == 0 && c == 0
-                    val isSelected = data != null &&
-                            vm.active.lastRow == r && vm.active.lastCol == c
+                    val isSelected = data != null && localCurrent?.first == r && localCurrent?.second == c
 
                     Box(
                         Modifier.graphicsLayer { translationX = xPx; translationY = yPx }
@@ -182,18 +189,6 @@ fun ArrayBuilderScreen(
                                         (selectedForSwap!!.first != r || selectedForSwap!!.second != c),
                                 isSelectMode = isSelectMode,
                                 isSource = (r == nestedRow && c == nestedCol),
-                                onOpenNested = {
-                                    if (data.nestedRow >= 0 && data.nestedCol >= 0) {
-                                        nav.navigate("card/${data.nestedRow}/${data.nestedCol}")
-                                    }
-                                },
-                                onNestedLongPress = {
-                                    if (data.nestedRow >= 0 && data.nestedCol >= 0) {
-                                        longPressMode = true
-                                        selectedForSwap = data.nestedRow to data.nestedCol
-                                        Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
                                 onClick = {
                                     if (isSelectMode) {
                                         if (r != nestedRow || c != nestedCol) {
@@ -206,10 +201,18 @@ fun ArrayBuilderScreen(
                                             vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
                                             selectedForSwap = null; longPressMode = false
                                         }
-                                    } else vm.updateLastCell(r, c)
+                                    } else {
+                                        // Локальное выделение, НЕ трогаем vm.lastRow/lastCol
+                                        localCurrent = r to c
+                                    }
                                 },
                                 onDoubleTap = {
-                                    if (!isSelectMode && !longPressMode) nav.navigate("card/$r/$c")
+                                    if (!isSelectMode && !longPressMode) {
+                                        // Двойной тап: заходим в карточку. Тут уже
+                                        // сохраняем lastRow/lastCol, чтобы вернуться на неё.
+                                        vm.updateLastCell(r, c)
+                                        nav.navigate("card/$r/$c")
+                                    }
                                 },
                                 onLongPress = {
                                     if (!isSelectMode) {
@@ -222,11 +225,12 @@ fun ArrayBuilderScreen(
                             isPlus || isEmptyStart -> PlusButton(
                                 onClick = {
                                     if (isSelectMode) {
-                                        // Нельзя вложить в пустую — игнорируем
+                                        // нельзя вложить в пустую
                                     } else if (longPressMode && selectedForSwap != null) {
                                         vm.swapCells(selectedForSwap!!.first, selectedForSwap!!.second, r, c)
                                         selectedForSwap = null; longPressMode = false
                                     } else if (!longPressMode) {
+                                        vm.updateLastCell(r, c)
                                         nav.navigate("card/$r/$c")
                                     }
                                 }
@@ -333,23 +337,18 @@ fun ArrayBuilderScreen(
     DisposableEffect(Unit) { onDispose { vm.autosave() } }
 }
 
-private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean =
-    cells.containsKey("${r-1},$c") || cells.containsKey("${r+1},$c") ||
-    cells.containsKey("$r,${c-1}") || cells.containsKey("$r,${c+1}")
+private fun hasNeighbor(r: Int, c: Int, cells: Map<String, CellData>): Boolean {
+    val keys = cells.keys
+    return keys.any { it.startsWith("${r-1},$c") || it.startsWith("${r+1},$c") ||
+            it.startsWith("$r,${c-1}") || it.startsWith("$r,${c+1}") }
+}
 
 @Composable
 private fun CreatedCell(
-    data: CellData,
-    vm: AppViewModel,
-    isSelected: Boolean,
-    isSwapTarget: Boolean,
-    isSelectMode: Boolean,
-    isSource: Boolean,
-    onOpenNested: () -> Unit,
-    onNestedLongPress: () -> Unit,
-    onClick: () -> Unit,
-    onDoubleTap: () -> Unit,
-    onLongPress: () -> Unit
+    data: CellData, vm: AppViewModel,
+    isSelected: Boolean, isSwapTarget: Boolean,
+    isSelectMode: Boolean, isSource: Boolean,
+    onClick: () -> Unit, onDoubleTap: () -> Unit, onLongPress: () -> Unit
 ) {
     val borderColor = when {
         isSource && isSelectMode -> Color(0xFF9E9E9E)
@@ -358,91 +357,29 @@ private fun CreatedCell(
         else -> Color.Transparent
     }
     val shape = RoundedCornerShape(12.dp)
-    val density = LocalDensity.current
-    val titleH = 24.dp
-
-    Box(Modifier.fillMaxSize()) {
-        // ==== Подложка ====
-        if (data.nestedImageFile != null || data.nestedTitle.isNotBlank()) {
-            Card(
-                shape = shape,
-                elevation = CardDefaults.cardElevation(3.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF9C4)),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset(x = titleH, y = -titleH)
-                    .pointerInput(data.nestedRow, data.nestedCol) {
-                        detectTapGestures(
-                            onDoubleTap = { onOpenNested() },
-                            onLongPress = { onNestedLongPress() }
-                        )
-                    }
-            ) {
-                Column(Modifier.fillMaxSize().padding(4.dp)) {
-                    Text(
-                        data.nestedTitle.ifBlank { "Подложка" },
-                        maxLines = 1,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Box(
-                        Modifier.fillMaxWidth().weight(1f)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFE0E0E0))
-                    ) {
-                        data.nestedImageFile?.let { f ->
-                            AsyncImage(
-                                model = vm.repo.imageFile(f),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                }
+    Card(
+        shape = shape, elevation = CardDefaults.cardElevation(6.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        modifier = Modifier.fillMaxSize()
+            .then(if (isSelected || isSwapTarget || (isSource && isSelectMode))
+                Modifier.border(3.dp, borderColor, shape) else Modifier)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = { onDoubleTap() },
+                    onLongPress = { onLongPress() },
+                    onTap = { onClick() }
+                )
             }
-        }
-
-        // ==== Главная карта ====
-        Card(
-            shape = shape,
-            elevation = CardDefaults.cardElevation(6.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (isSelected || isSwapTarget || (isSource && isSelectMode))
-                        Modifier.border(3.dp, borderColor, shape)
-                    else Modifier
-                )
-                .pointerInput(isSelectMode, isSource) {
-                    detectTapGestures(
-                        onDoubleTap = { onDoubleTap() },
-                        onLongPress = { onLongPress() },
-                        onTap = { onClick() }
-                    )
-                }
-        ) {
-            Column(Modifier.fillMaxSize().padding(6.dp)) {
-                Text(
-                    data.title.ifBlank { "Без названия" },
-                    maxLines = 1,
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    Modifier.fillMaxWidth().weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFFCFD8DC))
-                ) {
-                    data.imageFile?.let { f ->
-                        AsyncImage(
-                            model = vm.repo.imageFile(f),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+    ) {
+        Column(Modifier.fillMaxSize().padding(6.dp)) {
+            Text(data.title.ifBlank { "Без названия" }, maxLines = 1,
+                style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(4.dp))
+            Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFFCFD8DC))) {
+                data.imageFile?.let { f ->
+                    AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
+                        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 }
             }
         }
