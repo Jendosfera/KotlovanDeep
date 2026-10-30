@@ -51,8 +51,7 @@ import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.vm.AppViewModel
 
-private val Yellow = Color(0xFFFFEB3B)
-private val Blue = Color(0xFF1565C0)
+
 
 @Composable
 fun CellCardScreen(

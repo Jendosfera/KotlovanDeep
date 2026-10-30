@@ -88,8 +88,7 @@ import com.example.kotlovan.vm.AppViewModel
 import java.util.UUID
 import kotlin.math.min
 
-private val Yellow = Color(0xFFFFEB3B)
-private val Blue = Color(0xFF1565C0)
+
 private val BlackBorder = BorderStroke(7.dp, Color.Black)
 private val BlueBorder = BorderStroke(7.dp, Blue)
 private val PresetColors = listOf(

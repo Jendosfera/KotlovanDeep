@@ -53,8 +53,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val Yellow = Color(0xFFFFEB3B)
-private val Blue = Color(0xFF1565C0)
+
 private val Red = Color(0xFFF44336)
 
 @Composable
