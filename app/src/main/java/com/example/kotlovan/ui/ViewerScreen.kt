@@ -12,44 +12,16 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,24 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
-import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.data.LinkReturnState
 import com.example.kotlovan.data.PinLink
@@ -96,15 +58,6 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.min
-
-private enum class ViewerSubMode { VIEW, SET_COMMON_POINT, PLACE_COMMENT }
-private enum class SwipeDir { NONE, LEFT, RIGHT, UP, DOWN }
-
-private data class PendingJump(val x: Float, val y: Float, val scale: Float)
-
-private val LinkBorderColor = Color(0xFF00C853)
-private val YellowColor = Color(0xFFFFEB3B)
-private val BlueColor = Color(0xFF1565C0)
 
 @Composable
 fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
@@ -148,7 +101,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             else Toast.makeText(ctx, "Ошибка", Toast.LENGTH_SHORT).show()
         }
     }
-
     val openArchiveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -440,168 +392,83 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         // Верхняя панель
         if (!iconsHidden) {
-            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedIconButton(
-                    onClick = {
-                        if (inLinkMode) returnFromLink()
-                        else {
-                            persistViewport(); vm.autosave()
-                            val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
-                            if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
-                        }
-                    },
-                    icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
-                )
-                Spacer(Modifier.weight(1f))
-                OutlinedIconButton(
-                    onClick = { flashlight.toggle() },
-                    icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
-                )
-                if (!inLinkMode) {
-                    Spacer(Modifier.width(4.dp))
-                    val photoIconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
-                    val photoTint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
-                    Box(
-                        Modifier.size(44.dp).clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.45f))
-                            .clickable {
-                                vm.photoModeActive = !vm.photoModeActive
-                                savedRow = -1; savedCol = -1
-                                val t = vm.active
-                                row = t.lastRow; col = t.lastCol; depth = 0
-                                pendingJump = null
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = photoTint,
-                            modifier = Modifier.size(photoIconSize).alpha(cfg.iconOpacity))
+            ViewerTopBar(
+                vm = vm,
+                currentCell = currentCell,
+                maxDepth = maxDepth,
+                depth = depth,
+                menuOpen = menuOpen,
+                inLinkMode = inLinkMode,
+                baseIconDp = baseIconDp,
+                iconMod = iconMod,
+                onBack = {
+                    if (inLinkMode) returnFromLink()
+                    else {
+                        persistViewport(); vm.autosave()
+                        val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
+                        if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
                     }
-                    // Кнопка переключения слоя
-                    if (maxDepth > 0) {
-                        Spacer(Modifier.width(4.dp))
-                        Box(
-                            Modifier.size(44.dp).clip(CircleShape)
-                                .background(YellowColor)
-                                .border(5.dp, BlueColor, CircleShape)
-                                .clickable {
-                                    persistViewport()
-                                    depth = if (depth >= maxDepth) 0 else depth + 1
-                                    savedRow = -1; savedCol = -1
-                                    pendingJump = null
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Layers, "Слой $depth/$maxDepth", tint = BlueColor)
-                        }
+                },
+                onFlash = { flashlight.toggle() },
+                onTogglePhoto = {
+                    vm.photoModeActive = !vm.photoModeActive
+                    savedRow = -1; savedCol = -1
+                    val t = vm.active
+                    row = t.lastRow; col = t.lastCol; depth = 0
+                    pendingJump = null
+                },
+                onToggleLayer = {
+                    persistViewport()
+                    depth = if (depth >= maxDepth) 0 else depth + 1
+                    savedRow = -1; savedCol = -1
+                    pendingJump = null
+                },
+                onToggleArray = {
+                    persistViewport()
+                    vm.useAux = !vm.useAux
+                    val t = vm.active
+                    savedRow = -1; savedCol = -1
+                    row = t.lastRow; col = t.lastCol; depth = 0
+                    pendingJump = null
+                },
+                onMenuOpenToggle = { menuOpen = !menuOpen },
+                onMenuDismiss = { menuOpen = false },
+                onChangeLink = {
+                    val lr = vm.linkReturn!!
+                    nav.navigate("linkpicker/${lr.commentRow}/${lr.commentCol}/${lr.commentId}?depth=0")
+                },
+                onSetCommonPoint = { subMode = ViewerSubMode.SET_COMMON_POINT },
+                onOwnPositionToggle = {
+                    val c = currentCell ?: return@ViewerTopBar
+                    val newOwn = !c.ownPosition
+                    val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
+                    val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
+                    vm.updateCell(row, col, depth) {
+                        it.copy(ownPosition = newOwn,
+                            ownScale = if (newOwn) scale else it.ownScale,
+                            ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
+                            ownOffsetY = if (newOwn) vOy else it.ownOffsetY)
                     }
-                    Spacer(Modifier.width(4.dp))
-                    OutlinedIconButton(
-                        onClick = {
-                            persistViewport()
-                            vm.useAux = !vm.useAux
-                            val t = vm.active
-                            savedRow = -1; savedCol = -1
-                            row = t.lastRow; col = t.lastCol; depth = 0
-                            pendingJump = null
-                        },
-                        icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
-                        description = "Массив", iconModifier = iconMod
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-                Box {
-                    OutlinedIconButton(
-                        onClick = { menuOpen = !menuOpen },
-                        icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
-                    )
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        if (inLinkMode) {
-                            val lr = vm.linkReturn!!
-                            DropdownMenuItem(text = { Text("Изменить привязку") }, onClick = {
-                                menuOpen = false
-                                nav.navigate("linkpicker/${lr.commentRow}/${lr.commentCol}/${lr.commentId}?depth=0")
-                            })
-                        } else {
-                            DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
-                                menuOpen = false; subMode = ViewerSubMode.SET_COMMON_POINT
-                            })
-                            DropdownMenuItem(
-                                text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
-                                onClick = {
-                                    menuOpen = false
-                                    val c = currentCell ?: return@DropdownMenuItem
-                                    val newOwn = !c.ownPosition
-                                    val vOx = offsetX - containerW / 2f + c.commonX * fitW * scale
-                                    val vOy = offsetY - containerH / 2f + c.commonY * fitH * scale
-                                    vm.updateCell(row, col, depth) {
-                                        it.copy(ownPosition = newOwn,
-                                            ownScale = if (newOwn) scale else it.ownScale,
-                                            ownOffsetX = if (newOwn) vOx else it.ownOffsetX,
-                                            ownOffsetY = if (newOwn) vOy else it.ownOffsetY)
-                                    }
-                                }
-                            )
-                            DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
-                                menuOpen = false; subMode = ViewerSubMode.PLACE_COMMENT
-                            })
-                            DropdownMenuItem(text = { Text("Настройки") }, onClick = {
-                                menuOpen = false; showSettings = true
-                            })
-                        }
-                    }
-                }
-            }
+                },
+                onPlaceComment = { subMode = ViewerSubMode.PLACE_COMMENT },
+                onSettings = { showSettings = true }
+            )
 
             if (subMode == ViewerSubMode.VIEW && !inLinkMode) {
-                val selectedColor = if (vm.photoModeActive) Color(0xFF4CAF50) else BlueColor
-                Column(
-                    Modifier.align(Alignment.CenterStart)
-                        .padding(start = 4.dp, top = 60.dp, bottom = 100.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (r in rowRange) {
-                        val isEmpty = !vm.hasCell(r, col)
-                        SideButton(
-                            text = vm.active.rowLabels[r] ?: "R${r + 1}",
-                            selected = (r == row), dimmed = isEmpty,
-                            selectedColor = selectedColor,
-                            onClick = { if (!isEmpty) { persistViewport(); row = r; depth = 0 } },
-                            onLongClick = { labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" }
-                        )
-                    }
-                }
-                Row(
-                    Modifier.align(Alignment.BottomCenter)
-                        .padding(start = 60.dp, end = 8.dp, bottom = 12.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (c in colRange) {
-                        val isEmpty = !vm.hasCell(row, c)
-                        SideButton(
-                            text = vm.active.colLabels[c] ?: "C${c + 1}",
-                            selected = (c == col), dimmed = isEmpty,
-                            selectedColor = selectedColor,
-                            onClick = { if (!isEmpty) { persistViewport(); col = c; depth = 0 } },
-                            onLongClick = { labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" }
-                        )
-                    }
-                }
-                Box(
-                    Modifier.align(Alignment.BottomStart).padding(16.dp).size(48.dp)
-                        .clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
-                        .pointerInput(Unit) {
-                            detectTapGestures(onTap = { showAllRow = !showAllRow })
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        if (showAllRow) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        "Все строки", tint = Color.White,
-                        modifier = Modifier.size(baseIconDp).alpha(cfg.iconOpacity)
-                    )
-                }
+                ViewerSideButtons(
+                    vm = vm,
+                    row = row,
+                    col = col,
+                    rowRange = rowRange,
+                    colRange = colRange,
+                    showAllRow = showAllRow,
+                    baseIconDp = baseIconDp,
+                    onRowClick = { r -> persistViewport(); row = r; depth = 0 },
+                    onColClick = { c -> persistViewport(); col = c; depth = 0 },
+                    onRowLong = { r -> labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" },
+                    onColLong = { c -> labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" },
+                    onToggleAllRow = { showAllRow = !showAllRow }
+                )
             }
         }
 
@@ -658,60 +525,28 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         // Контекстное меню
         contextMenu?.let { (pos, pins) ->
-            val menuWidthPx = with(density) { 220.dp.toPx() }
-            val closeRadiusPx = with(density) { 24.dp.toPx() }
-            val closeBtnSize = with(density) { 48.dp.toPx() }
-
-            Column(
-                Modifier
-                    .offset { IntOffset((pos.x - menuWidthPx).toInt(), pos.y.toInt()) }
-                    .width(220.dp)
-                    .background(YellowColor, RoundedCornerShape(8.dp))
-                    .border(7.dp, BlueColor, RoundedCornerShape(8.dp))
-                    .padding(8.dp)
-                    .zIndex(1f)
-            ) {
-                if (vm.photoModeActive && pins.isEmpty()) {
-                    Text("Сохранить архив",
-                        Modifier.fillMaxWidth().clickable {
-                            contextMenu = null
-                            saveArchiveLauncher.launch("Общий архив.zip")
-                        }.padding(vertical = 8.dp), color = Color.Black)
-                    Text("Загрузить архив",
-                        Modifier.fillMaxWidth().clickable {
-                            contextMenu = null
-                            openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                        }.padding(vertical = 8.dp), color = Color.Black)
-                    Text("Создать фотоотчёт",
-                        Modifier.fillMaxWidth().clickable {
-                            contextMenu = null
-                            nav.navigate("photoreport")
-                        }.padding(vertical = 8.dp), color = Color.Black)
-                } else if (pins.isEmpty()) {
-                    Text("Нет комментариев", color = Color.Black)
-                } else {
-                    for (pin in pins) {
-                        Text(
-                            pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
-                                contextMenu = null
-                            }.padding(vertical = 6.dp),
-                            color = Color.Black
-                        )
-                    }
+            ViewerContextMenu(
+                pos = pos,
+                pins = pins,
+                photoModeActive = vm.photoModeActive,
+                onClose = { contextMenu = null },
+                onSaveArchive = {
+                    contextMenu = null
+                    saveArchiveLauncher.launch("Общий архив.zip")
+                },
+                onOpenArchive = {
+                    contextMenu = null
+                    openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                },
+                onOpenReport = {
+                    contextMenu = null
+                    nav.navigate("photoreport")
+                },
+                onPinClick = { pin ->
+                    nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
+                    contextMenu = null
                 }
-            }
-            Box(
-                Modifier
-                    .offset { IntOffset((pos.x - closeRadiusPx).toInt(), (pos.y - closeRadiusPx).toInt()) }
-                    .size(with(density) { closeBtnSize.toDp() })
-                    .background(Color.Red, CircleShape)
-                    .border(7.dp, Color.Black, CircleShape)
-                    .clickable { contextMenu = null }
-                    .zIndex(2f),
-                contentAlignment = Alignment.Center
-            ) { Text("×", color = Color.Black, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+            )
         }
 
         if (showSettings && !iconsHidden) {
@@ -753,151 +588,5 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             vm.autosave()
             flashlight.off()
         }
-    }
-}
-
-private fun findPinAt2(
-    currentRow: Int, currentCol: Int, currentDepth: Int, showAllRow: Boolean,
-    pos: Offset, fitW: Float, fitH: Float, scale: Float, offset: Offset,
-    vm: AppViewModel
-): Triple<Int, Int, CommentPin>? {
-    val currentCell = vm.cell(currentRow, currentCol, currentDepth) ?: return null
-    for (pin in currentCell.comments.reversed()) {
-        val cx = pin.x * fitW * scale + offset.x
-        val cy = pin.y * fitH * scale + offset.y
-        val rad = pin.radius * fitW * scale * 2f
-        val dx = pos.x - cx; val dy = pos.y - cy
-        if (dx * dx + dy * dy <= rad * rad) return Triple(currentRow, currentCol, pin)
-    }
-    if (showAllRow) {
-        val cols = vm.active.cells.keys.mapNotNull { k ->
-            val p = k.split(",")
-            if (p.getOrNull(0)?.toIntOrNull() == currentRow) p.getOrNull(1)?.toIntOrNull() else null
-        }.distinct().sorted()
-        for (c in cols) {
-            if (c == currentCol) continue
-            val oc = vm.cell(currentRow, c, 0) ?: continue
-            for (pin in oc.comments.reversed()) {
-                val dx = pin.x - oc.commonX
-                val dy = pin.y - oc.commonY
-                val ax = currentCell.commonX + dx
-                val ay = currentCell.commonY + dy
-                if (ax !in 0f..1f || ay !in 0f..1f) continue
-                val cx = ax * fitW * scale + offset.x
-                val cy = ay * fitH * scale + offset.y
-                val rad = pin.radius * fitW * scale * 2f
-                val ddx = pos.x - cx; val ddy = pos.y - cy
-                if (ddx * ddx + ddy * ddy <= rad * rad) return Triple(currentRow, c, pin)
-            }
-        }
-    }
-    return null
-}
-
-@Composable
-private fun CrosshairBlack(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(48.dp)) {
-        val cx = size.width / 2
-        val cy = size.height / 2
-        val stroke = 2.dp.toPx()
-        val short = 8.dp.toPx()
-        val long = 20.dp.toPx()
-        drawLine(Color.Black, Offset(cx - long, cy), Offset(cx - short, cy), stroke)
-        drawLine(Color.Black, Offset(cx + short, cy), Offset(cx + long, cy), stroke)
-        drawLine(Color.Black, Offset(cx, cy - long), Offset(cx, cy - short), stroke)
-        drawLine(Color.Black, Offset(cx, cy + short), Offset(cx, cy + long), stroke)
-        drawCircle(Color.Black, radius = 3.dp.toPx(), center = Offset(cx, cy))
-    }
-}
-
-@Composable
-private fun SideButton(
-    text: String, selected: Boolean, dimmed: Boolean = false,
-    selectedColor: Color = BlueColor,
-    onClick: () -> Unit, onLongClick: () -> Unit
-) {
-    val baseScale = if (dimmed) 0.8f else 1f
-    Box(
-        Modifier
-            .size(width = 52.dp, height = 40.dp)
-            .scale(if (selected) 1.15f else baseScale)
-            .alpha(if (dimmed) 0.5f else 1f)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) selectedColor else Color.Black.copy(alpha = 0.5f))
-            .pointerInput(text, selected, dimmed) {
-                detectTapGestures(onTap = { onClick() }, onLongPress = { onLongClick() })
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text, color = Color.White, maxLines = 1,
-            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
-}
-
-@Composable
-private fun OutlinedIconButton(
-    onClick: () -> Unit, icon: ImageVector, description: String,
-    iconModifier: Modifier = Modifier, modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier.size(44.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) { Icon(icon, description, tint = Color.White, modifier = iconModifier) }
-}
-
-@Composable
-private fun CommentPinRender(
-    pin: CommentPin, scale: Float, offset: Offset,
-    fitW: Float, fitH: Float,
-    showTitle: Boolean, dimmed: Boolean = false
-) {
-    if (pin.x !in 0f..1f || pin.y !in 0f..1f) return
-    val density = LocalDensity.current
-    val screenX = pin.x * fitW * scale + offset.x
-    val screenY = pin.y * fitH * scale + offset.y
-    val diameterPx = pin.radius * fitW * scale * 2f
-    val diameterDp = with(density) { diameterPx.toDp() }
-    val alpha = if (dimmed) 0.5f else 1f
-    val inner = diameterDp / 2
-
-    Box(
-        Modifier
-            .offset { IntOffset((screenX - diameterPx / 2f).toInt(), (screenY - diameterPx / 2f).toInt()) }
-            .size(diameterDp)
-            .alpha(alpha)
-    ) {
-        Box(Modifier.fillMaxSize().background(Color(pin.strokeColor.toInt()), CircleShape))
-        Box(
-            Modifier.fillMaxSize().padding(diameterDp / 4),
-            contentAlignment = Alignment.Center
-        ) {
-            CommentIconShape(type = pin.iconType, color = Color(pin.color.toInt()), sizeDp = inner)
-        }
-        if (pin.shortLabel.isNotBlank()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    pin.shortLabel, color = Color.Black,
-                    fontSize = with(density) { (diameterPx * 0.35f).toSp() },
-                    maxLines = 1
-                )
-            }
-        }
-    }
-    if (showTitle && pin.title.isNotBlank()) {
-        val titleFontPx = (diameterPx * 0.35f).coerceAtLeast(with(density) { 10.dp.toPx() })
-        Text(
-            text = pin.title, color = Color.White,
-            fontSize = with(density) { titleFontPx.toSp() }, maxLines = 1,
-            modifier = Modifier
-                .offset { IntOffset((screenX - diameterPx / 2f).toInt(),
-                    (screenY - diameterPx / 2f - titleFontPx - 4f).toInt()) }
-                .background(Color(0xAA000000), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        )
     }
 }
