@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.example.kotlovan.vm.AppViewModel
 
 @Composable
-internal fun ViewerSideButtons(
+internal fun BoxScope.ViewerSideButtons(
     vm: AppViewModel,
     row: Int,
     col: Int,
@@ -62,6 +63,7 @@ internal fun ViewerSideButtons(
             )
         }
     }
+
     Row(
         Modifier.align(Alignment.BottomCenter)
             .padding(start = 60.dp, end = 8.dp, bottom = 12.dp)
@@ -79,6 +81,7 @@ internal fun ViewerSideButtons(
             )
         }
     }
+
     Box(
         Modifier.align(Alignment.BottomStart).padding(16.dp).size(48.dp)
             .clip(CircleShape).background(Color.Black.copy(alpha = 0.45f))
