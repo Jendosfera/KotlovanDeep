@@ -201,14 +201,7 @@ fun ArrayBuilderScreen(
 								}
 								val dOffsetXDp: Float = if (isExpanded) d * 30f else collapsedOffset
 								val dOffsetYDp: Float = if (isExpanded) d * 30f else collapsedOffset
-                                val dOffsetYDp: Float = if (isExpanded) {
-                                    d * 30f
-                                } else when (d) {
-                                    0 -> 0f
-                                    1 -> CELL_SIZE * (1f - 0.78f)
-                                    2 -> CELL_SIZE * (1f - 0.5f)
-                                    else -> CELL_SIZE * (1f - 0.5f)
-                                }
+                               
 
                                 CreatedCell(
                                     data = cell, vm = vm,
