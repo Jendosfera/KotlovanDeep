@@ -333,29 +333,25 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 else nav.navigate("comment/$hr/$hc/${pin.id}?depth=$depth")
                             }
                         },
-                        onLongPress = { pos ->
-                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-                            if (vm.photoModeActive) {
-                                contextMenu = pos to emptyList()
-                                return@detectViewerGestures
-                            }
-                            val cell = vm.cell(row, col, depth) ?: return@detectViewerGestures
-                            val visible = cell.comments.filter { pin ->
-                                val sx = pin.x * fitW * scale + offsetX
-                                val sy = pin.y * fitH * scale + offsetY
-                                sx in 0f..containerW && sy in 0f..containerH
-                            }
-                            val rowPins = if (showAllRow) {
-                                val extra = mutableListOf<CommentPin>()
-                                for (c in colRange) {
-                                    if (c == col) continue
-                                    val oc = vm.cell(row, c, 0) ?: continue
-                                    extra += oc.comments
-                                }
-                                visible + extra
-                            } else visible
-                            if (rowPins.isNotEmpty()) contextMenu = pos to rowPins
-                        }
+						onLongPress = { pos ->
+							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+							val cell = vm.cell(row, col, depth) ?: return@detectViewerGestures
+							val visible = cell.comments.filter { pin ->
+								val sx = pin.x * fitW * scale + offsetX
+								val sy = pin.y * fitH * scale + offsetY
+								sx in 0f..containerW && sy in 0f..containerH
+							}
+							val rowPins = if (showAllRow) {
+								val extra = mutableListOf<CommentPin>()
+								for (c in colRange) {
+									if (c == col) continue
+									val oc = vm.cell(row, c, 0) ?: continue
+									extra += oc.comments
+								}
+								visible + extra
+							} else visible
+							contextMenu = pos to rowPins
+						}
                     )
                 }
         )
@@ -451,7 +447,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     }
                 },
                 onPlaceComment = { subMode = ViewerSubMode.PLACE_COMMENT },
-                onSettings = { showSettings = true }
+                onSettings = { showSettings = true },
+				onSettings = { showSettings = true },
+				onSaveArchive = {
+					saveArchiveLauncher.launch("Общий архив.zip")
+				},
+				onLoadArchive = {
+					openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+				},
+				onOpenReport = { nav.navigate("photoreport") }				
             )
 
             if (subMode == ViewerSubMode.VIEW && !inLinkMode) {

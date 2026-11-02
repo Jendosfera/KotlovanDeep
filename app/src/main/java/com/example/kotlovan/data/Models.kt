@@ -117,12 +117,10 @@ data class ArrayConfig(
     val name: String = "Массив",
     val main: SubArray = SubArray(),
     val aux: SubArray = SubArray(),
-    val photoMain: SubArray = SubArray(),   // ← заменяет photoArchive
-    val photoAux: SubArray = SubArray(),    // ← новое
+    val photoComments: Map<String, List<CommentPin>> = emptyMap(),
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )
-
 @Serializable
 data class LinkReturnState(
     val isAux: Boolean,

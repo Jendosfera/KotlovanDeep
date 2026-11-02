@@ -28,14 +28,17 @@ import com.example.kotlovan.data.CommentPin
 
 @Composable
 internal fun ViewerContextMenu(
-    pos: Offset,
-    pins: List<CommentPin>,
-    photoModeActive: Boolean,
-    onClose: () -> Unit,
-    onSaveArchive: () -> Unit,
-    onOpenArchive: () -> Unit,
-    onOpenReport: () -> Unit,
-    onPinClick: (CommentPin) -> Unit
+    pos = pos,
+    pins = pins,
+    photoModeActive = false,   // меню архива теперь в верхней панели
+    onClose = { contextMenu = null },
+    onSaveArchive = { contextMenu = null },
+    onOpenArchive = { contextMenu = null },
+    onOpenReport = { contextMenu = null },
+    onPinClick = { pin ->
+        nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
+        contextMenu = null
+    }
 ) {
     val density = LocalDensity.current
     val menuWidthPx = with(density) { 220.dp.toPx() }

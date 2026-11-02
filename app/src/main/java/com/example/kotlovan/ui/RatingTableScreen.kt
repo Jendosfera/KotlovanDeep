@@ -52,30 +52,30 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     val yellow = Color(0xFFFFEB3B)
     val blue = Color(0xFF1565C0)
 
-    val rows = remember(
-        vm.config.main.cells, vm.config.aux.cells,
-        vm.config.photoMain.cells, vm.config.photoAux.cells,
-        vm.photoModeActive
-    ) {
-        val list = mutableListOf<RatingRow>()
-        fun collect(cells: Map<String, com.example.kotlovan.data.CellData>, isAux: Boolean) {
-            for ((k, c) in cells) {
-                val p = k.split(",")
-                val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-                val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
-                val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
-                for (pin in c.comments) list += RatingRow(pin, r, cc, dd, isAux)
-            }
-        }
-        if (vm.photoModeActive) {
-            collect(vm.config.photoMain.cells, false)
-            collect(vm.config.photoAux.cells, true)
-        } else {
-            collect(vm.config.main.cells, false)
-            collect(vm.config.aux.cells, true)
-        }
-        list.sortedByDescending { it.pin.rating }
-    }
+	val rows = remember(
+		vm.config.main.cells, vm.config.aux.cells,
+		vm.config.photoComments, vm.photoModeActive
+	) {
+		val list = mutableListOf<RatingRow>()
+		fun collect(cells: Map<String, CellData>, isAux: Boolean, usePhoto: Boolean) {
+			for ((k, c) in cells) {
+				val p = k.split(",")
+				val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+				val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
+				val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
+				val comments = if (usePhoto) vm.config.photoComments[k].orEmpty() else c.comments
+				for (pin in comments) list += RatingRow(pin, r, cc, dd, isAux)
+			}
+		}
+		if (vm.photoModeActive) {
+			collect(vm.config.main.cells, false, true)
+			collect(vm.config.aux.cells, true, true)
+		} else {
+			collect(vm.config.main.cells, false, false)
+			collect(vm.config.aux.cells, true, false)
+		}
+		list.sortedByDescending { it.pin.rating }
+	}
 
     val listState = rememberLazyListState()
     LaunchedEffect(vm.lastRatingRow) {
@@ -183,19 +183,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                     label = { Text("Рейтинг") }
                 )
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val newVal = text.toIntOrNull() ?: r.pin.rating
-                    vm.useAux = r.isAux
-                    vm.updateCell(r.row, r.col, r.depth) { cell ->
-                        cell.copy(comments = cell.comments.map {
-                            if (it.id == r.pin.id) it.copy(rating = newVal) else it
-                        })
-                    }
-                    vm.autosave()
-                    editRating = null
-                }) { Text("OK") }
-            },
+			confirmButton = {
+				TextButton(onClick = {
+					val newVal = text.toIntOrNull() ?: r.pin.rating
+					vm.useAux = r.isAux
+					val cur = vm.cell(r.row, r.col, r.depth)
+					if (cur != null) {
+						val updated = cur.comments.map {
+							if (it.id == r.pin.id) it.copy(rating = newVal) else it
+						}
+						vm.setComments(r.row, r.col, updated, r.depth)
+					}
+					vm.autosave()
+					editRating = null
+				}) { Text("OK") }
+			},
             dismissButton = { TextButton(onClick = { editRating = null }) { Text("Отмена") } }
         )
     }

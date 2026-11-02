@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -55,7 +56,10 @@ internal fun ViewerTopBar(
     onSetCommonPoint: () -> Unit,
     onOwnPositionToggle: () -> Unit,
     onPlaceComment: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    onSaveArchive: () -> Unit,
+    onLoadArchive: () -> Unit,
+    onOpenReport: () -> Unit
 ) {
     val cfg = vm.config
     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -109,19 +113,47 @@ internal fun ViewerTopBar(
             DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
                 if (inLinkMode) {
                     DropdownMenuItem(text = { Text("Изменить привязку") }, onClick = {
-                        onMenuDismiss()
-                        onChangeLink()
+                        onMenuDismiss(); onChangeLink()
                     })
+                } else if (vm.photoModeActive) {
+                    // === Меню фотофиксации ===
+                    DropdownMenuItem(text = { Text("Создать комментарий") }, onClick = {
+                        onMenuDismiss(); onPlaceComment()
+                    })
+                    DropdownMenuItem(text = { Text("Сохранить архив") }, onClick = {
+                        onMenuDismiss(); onSaveArchive()
+                    })
+                    DropdownMenuItem(text = { Text("Загрузить архив") }, onClick = {
+                        onMenuDismiss(); onLoadArchive()
+                    })
+                    DropdownMenuItem(text = { Text("Создать фотоотчет") }, onClick = {
+                        onMenuDismiss(); onOpenReport()
+                    })
+                    DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
+                        onMenuDismiss(); onSetCommonPoint()
+                    })
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = currentCell?.ownPosition ?: false,
+                                    onCheckedChange = null
+                                )
+                                Text("Свое положение")
+                            }
+                        },
+                        onClick = {
+                            onMenuDismiss(); onOwnPositionToggle()
+                        }
+                    )
                 } else {
+                    // === Обычное меню ===
                     DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
                         onMenuDismiss(); onSetCommonPoint()
                     })
                     DropdownMenuItem(
                         text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
-                        onClick = {
-                            onMenuDismiss()
-                            onOwnPositionToggle()
-                        }
+                        onClick = { onMenuDismiss(); onOwnPositionToggle() }
                     )
                     DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
                         onMenuDismiss(); onPlaceComment()

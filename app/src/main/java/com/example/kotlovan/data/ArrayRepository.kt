@@ -150,17 +150,19 @@ class ArrayRepository(private val context: Context) {
                     zip.closeEntry()
 
                     val used = LinkedHashSet<String>()
-                    fun collect(sub: SubArray) {
-                        for ((_, cell) in sub.cells) {
-                            cell.imageFile?.let { used += it }
-                            
-                            for (pin in cell.comments) for (ph in pin.photos) used += ph.file
-                        }
-                    }
-                    collect(config.main)
-                    collect(config.aux)
-                    collect(config.photoMain)
-                    collect(config.photoAux)
+					fun collect(sub: SubArray) {
+						for ((_, cell) in sub.cells) {
+							cell.imageFile?.let { used += it }
+							for (pin in cell.comments) for (ph in pin.photos) used += ph.file
+						}
+					}
+					collect(config.main)
+					collect(config.aux)
+					// фото-комментарии хранят только ссылки на уже собранные файлы,
+					// отдельные картинки для них не нужны
+					for (comments in config.photoComments.values) {
+						for (pin in comments) for (ph in pin.photos) used += ph.file
+					}
 
                     for (name in used) {
                         val f = File(imagesDir, name)

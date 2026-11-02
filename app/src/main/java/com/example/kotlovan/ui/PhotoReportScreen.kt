@@ -62,16 +62,22 @@ private val RedC = Color(0xFFF44336)
 fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
 
-    val archive: SubArray = remember(vm.config.photoMain, vm.config.photoAux) {
-        val merged = LinkedHashMap<String, CellData>()
-        merged.putAll(vm.config.photoMain.cells)
-        merged.putAll(vm.config.photoAux.cells)
-        SubArray(
-            cells = merged,
-            rowLabels = vm.config.photoMain.rowLabels + vm.config.photoAux.rowLabels,
-            colLabels = vm.config.photoMain.colLabels + vm.config.photoAux.colLabels
-        )
-    }
+	val archive: SubArray = remember(vm.config.main.cells, vm.config.aux.cells, vm.config.photoComments) {
+		val merged = LinkedHashMap<String, CellData>()
+		for ((k, cell) in vm.config.main.cells) {
+			val photoComms = vm.config.photoComments[k].orEmpty()
+			if (photoComms.isNotEmpty()) merged[k] = cell.copy(comments = photoComms)
+		}
+		for ((k, cell) in vm.config.aux.cells) {
+			val photoComms = vm.config.photoComments[k].orEmpty()
+			if (photoComms.isNotEmpty()) merged[k] = cell.copy(comments = photoComms)
+		}
+		SubArray(
+			cells = merged,
+			rowLabels = vm.config.main.rowLabels + vm.config.aux.rowLabels,
+			colLabels = vm.config.main.colLabels + vm.config.aux.colLabels
+		)
+	}
 
     val allPins = remember(archive) {
         val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
