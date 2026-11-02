@@ -2,7 +2,6 @@ package com.example.kotlovan.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,13 +9,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -40,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.vm.AppViewModel
 
@@ -52,30 +49,30 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     val yellow = Color(0xFFFFEB3B)
     val blue = Color(0xFF1565C0)
 
-	val rows = remember(
-		vm.config.main.cells, vm.config.aux.cells,
-		vm.config.photoComments, vm.photoModeActive
-	) {
-		val list = mutableListOf<RatingRow>()
-		fun collect(cells: Map<String, CellData>, isAux: Boolean, usePhoto: Boolean) {
-			for ((k, c) in cells) {
-				val p = k.split(",")
-				val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-				val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
-				val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
-				val comments = if (usePhoto) vm.config.photoComments[k].orEmpty() else c.comments
-				for (pin in comments) list += RatingRow(pin, r, cc, dd, isAux)
-			}
-		}
-		if (vm.photoModeActive) {
-			collect(vm.config.main.cells, false, true)
-			collect(vm.config.aux.cells, true, true)
-		} else {
-			collect(vm.config.main.cells, false, false)
-			collect(vm.config.aux.cells, true, false)
-		}
-		list.sortedByDescending { it.pin.rating }
-	}
+    val rows = remember(
+        vm.config.main.cells, vm.config.aux.cells,
+        vm.config.photoComments, vm.photoModeActive
+    ) {
+        val list = mutableListOf<RatingRow>()
+        fun collect(cells: Map<String, CellData>, isAux: Boolean, usePhoto: Boolean) {
+            for ((k, c) in cells) {
+                val p = k.split(",")
+                val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+                val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
+                val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
+                val comments = if (usePhoto) vm.config.photoComments[k].orEmpty() else c.comments
+                for (pin in comments) list += RatingRow(pin, r, cc, dd, isAux)
+            }
+        }
+        if (vm.photoModeActive) {
+            collect(vm.config.main.cells, false, true)
+            collect(vm.config.aux.cells, true, true)
+        } else {
+            collect(vm.config.main.cells, false, false)
+            collect(vm.config.aux.cells, true, false)
+        }
+        list.sortedByDescending { it.pin.rating }
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(vm.lastRatingRow) {
@@ -92,17 +89,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                 IconButton(onClick = { nav.popBackStack() }) {
                     Icon(Icons.Default.ArrowBack, "Назад", tint = blue)
                 }
-                Text("Рейтинг комментариев", color = blue, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Рейтинг комментариев", color = blue, fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
 
-            Row(
-                Modifier.fillMaxWidth().background(yellow).border(3.dp, Color.Black).padding(4.dp)
-            ) {
-                Text("Рейтинг", Modifier.width(70.dp), color = Color.Black, fontWeight = FontWeight.Bold)
-                Text("Название", Modifier.weight(1f), color = Color.Black, fontWeight = FontWeight.Bold)
-                Text("Строка", Modifier.width(80.dp), color = Color.Black, fontWeight = FontWeight.Bold)
-                Text("Столбец", Modifier.width(80.dp), color = Color.Black, fontWeight = FontWeight.Bold)
+            Row(Modifier.fillMaxWidth().background(yellow)
+                .border(3.dp, Color.Black).padding(4.dp)) {
+                Text("Рейтинг", Modifier.width(70.dp), color = Color.Black,
+                    fontWeight = FontWeight.Bold)
+                Text("Название", Modifier.weight(1f), color = Color.Black,
+                    fontWeight = FontWeight.Bold)
+                Text("Строка", Modifier.width(80.dp), color = Color.Black,
+                    fontWeight = FontWeight.Bold)
+                Text("Столбец", Modifier.width(80.dp), color = Color.Black,
+                    fontWeight = FontWeight.Bold)
             }
 
             LazyColumn(Modifier.weight(1f).border(3.dp, Color.Black), state = listState) {
@@ -120,14 +121,14 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                                 detectTapGestures(onDoubleTap = { editRating = r })
                             },
                             contentAlignment = Alignment.Center
-                        ) { Text("${r.pin.rating}", color = Color.Black, fontWeight = FontWeight.Bold) }
+                        ) { Text("${r.pin.rating}", color = Color.Black,
+                            fontWeight = FontWeight.Bold) }
 
                         Box(
                             Modifier.weight(1f).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = {
                                     vm.lastRatingRow = idx
                                     vm.useAux = r.isAux
-                                    
                                     nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}?depth=${r.depth}")
                                 })
                             }
@@ -143,8 +144,6 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                             Text(
                                 vm.config.main.rowLabels[r.row]
                                     ?: vm.config.aux.rowLabels[r.row]
-                                    ?: vm.config.photoMain.rowLabels[r.row]
-                                    ?: vm.config.photoAux.rowLabels[r.row]
                                     ?: "R${r.row + 1}",
                                 color = Color.Black
                             )
@@ -158,8 +157,6 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                             Text(
                                 vm.config.main.colLabels[r.col]
                                     ?: vm.config.aux.colLabels[r.col]
-                                    ?: vm.config.photoMain.colLabels[r.col]
-                                    ?: vm.config.photoAux.colLabels[r.col]
                                     ?: "C${r.col + 1}",
                                 color = Color.Black
                             )
@@ -183,29 +180,29 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                     label = { Text("Рейтинг") }
                 )
             },
-			confirmButton = {
-				TextButton(onClick = {
-					val newVal = text.toIntOrNull() ?: r.pin.rating
-					vm.useAux = r.isAux
-					val cur = vm.cell(r.row, r.col, r.depth)
-					if (cur != null) {
-						val updated = cur.comments.map {
-							if (it.id == r.pin.id) it.copy(rating = newVal) else it
-						}
-						vm.setComments(r.row, r.col, updated, r.depth)
-					}
-					vm.autosave()
-					editRating = null
-				}) { Text("OK") }
-			},
+            confirmButton = {
+                TextButton(onClick = {
+                    val newVal = text.toIntOrNull() ?: r.pin.rating
+                    vm.useAux = r.isAux
+                    val cur = vm.cell(r.row, r.col, r.depth)
+                    if (cur != null) {
+                        val updated = cur.comments.map {
+                            if (it.id == r.pin.id) it.copy(rating = newVal) else it
+                        }
+                        vm.setComments(r.row, r.col, updated, r.depth)
+                    }
+                    vm.autosave()
+                    editRating = null
+                }) { Text("OK") }
+            },
             dismissButton = { TextButton(onClick = { editRating = null }) { Text("Отмена") } }
         )
     }
 
     if (showRowsDialog) {
-        val allRows = (vm.config.main.cells.keys + vm.config.aux.cells.keys +
-                vm.config.photoMain.cells.keys + vm.config.photoAux.cells.keys)
-            .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }.distinct().sorted()
+        val allRows = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
+            .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }
+            .distinct().sorted()
         AlertDialog(
             onDismissRequest = { showRowsDialog = false },
             containerColor = yellow,
@@ -213,24 +210,28 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Column {
                     for (r in allRows) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = r !in vm.hiddenRows,
                                 onCheckedChange = { vm.toggleRowVisibility(r) }
                             )
-                            Text(vm.config.main.rowLabels[r] ?: "R${r + 1}", color = Color.Black)
+                            Text(vm.config.main.rowLabels[r] ?: "R${r + 1}",
+                                color = Color.Black)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showRowsDialog = false }) { Text("OK") } }
+            confirmButton = { TextButton(onClick = { showRowsDialog = false }) {
+                Text("OK")
+            } }
         )
     }
 
     if (showColsDialog) {
-        val allCols = (vm.config.main.cells.keys + vm.config.aux.cells.keys +
-                vm.config.photoMain.cells.keys + vm.config.photoAux.cells.keys)
-            .mapNotNull { it.split(",").getOrNull(1)?.toIntOrNull() }.distinct().sorted()
+        val allCols = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
+            .mapNotNull { it.split(",").getOrNull(1)?.toIntOrNull() }
+            .distinct().sorted()
         AlertDialog(
             onDismissRequest = { showColsDialog = false },
             containerColor = yellow,
@@ -238,17 +239,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Column {
                     for (c in allCols) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = c !in vm.hiddenCols,
                                 onCheckedChange = { vm.toggleColVisibility(c) }
                             )
-                            Text(vm.config.main.colLabels[c] ?: "C${c + 1}", color = Color.Black)
+                            Text(vm.config.main.colLabels[c] ?: "C${c + 1}",
+                                color = Color.Black)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showColsDialog = false }) { Text("OK") } }
+            confirmButton = { TextButton(onClick = { showColsDialog = false }) {
+                Text("OK")
+            } }
         )
     }
 }

@@ -28,17 +28,10 @@ import com.example.kotlovan.data.CommentPin
 
 @Composable
 internal fun ViewerContextMenu(
-    pos = pos,
-    pins = pins,
-    photoModeActive = false,   // меню архива теперь в верхней панели
-    onClose = { contextMenu = null },
-    onSaveArchive = { contextMenu = null },
-    onOpenArchive = { contextMenu = null },
-    onOpenReport = { contextMenu = null },
-    onPinClick = { pin ->
-        nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
-        contextMenu = null
-    }
+    pos: Offset,
+    pins: List<CommentPin>,
+    onClose: () -> Unit,
+    onPinClick: (CommentPin) -> Unit
 ) {
     val density = LocalDensity.current
     val menuWidthPx = with(density) { 220.dp.toPx() }
@@ -54,25 +47,16 @@ internal fun ViewerContextMenu(
             .padding(8.dp)
             .zIndex(1f)
     ) {
-        if (photoModeActive && pins.isEmpty()) {
-            Text("Сохранить архив",
-                Modifier.fillMaxWidth().clickable(onClick = onSaveArchive).padding(vertical = 8.dp),
-                color = Color.Black)
-            Text("Загрузить архив",
-                Modifier.fillMaxWidth().clickable(onClick = onOpenArchive).padding(vertical = 8.dp),
-                color = Color.Black)
-            Text("Создать фотоотчёт",
-                Modifier.fillMaxWidth().clickable(onClick = onOpenReport).padding(vertical = 8.dp),
-                color = Color.Black)
-        } else if (pins.isEmpty()) {
+        if (pins.isEmpty()) {
             Text("Нет комментариев", color = Color.Black)
         } else {
             for (pin in pins) {
                 Text(
                     pin.title.ifBlank { pin.shortLabel.ifBlank { "Комментарий" } },
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        onPinClick(pin)
-                    }.padding(vertical = 6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPinClick(pin) }
+                        .padding(vertical = 6.dp),
                     color = Color.Black
                 )
             }

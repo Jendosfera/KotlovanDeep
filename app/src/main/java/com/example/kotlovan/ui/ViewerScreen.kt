@@ -448,7 +448,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 },
                 onPlaceComment = { subMode = ViewerSubMode.PLACE_COMMENT },
                 onSettings = { showSettings = true },
-				onSettings = { showSettings = true },
+				
 				onSaveArchive = {
 					saveArchiveLauncher.launch("Общий архив.zip")
 				},
@@ -529,28 +529,17 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         // Контекстное меню
         contextMenu?.let { (pos, pins) ->
-            ViewerContextMenu(
-                pos = pos,
-                pins = pins,
-                photoModeActive = vm.photoModeActive,
-                onClose = { contextMenu = null },
-                onSaveArchive = {
-                    contextMenu = null
-                    saveArchiveLauncher.launch("Общий архив.zip")
-                },
-                onOpenArchive = {
-                    contextMenu = null
-                    openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                },
-                onOpenReport = {
-                    contextMenu = null
-                    nav.navigate("photoreport")
-                },
-                onPinClick = { pin ->
-                    nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
-                    contextMenu = null
-                }
-            )
+			contextMenu?.let { (pos, pins) ->
+				ViewerContextMenu(
+					pos = pos,
+					pins = pins,
+					onClose = { contextMenu = null },
+					onPinClick = { pin ->
+						nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
+						contextMenu = null
+					}
+				)
+			}
         }
 
         if (showSettings && !iconsHidden) {
