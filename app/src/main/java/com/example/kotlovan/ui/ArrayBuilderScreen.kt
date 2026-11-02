@@ -190,14 +190,17 @@ fun ArrayBuilderScreen(
                                 }
                                 // Смещение: свёрнутый — «каскад» от top-left,
                                 // expanded — все ячейки каскадом d*30dp вправо-вниз
-                                val dOffsetXDp: Float = if (isExpanded) {
-                                    d * 30f
-                                } else when (d) {
-                                    0 -> 0f
-                                    1 -> CELL_SIZE * (1f - 0.78f)   // 35.2
-                                    2 -> CELL_SIZE * (1f - 0.5f)    // 80
-                                    else -> CELL_SIZE * (1f - 0.5f)
-                                }
+								// Свёрнутый стек: d=0 заполняет ячейку, d=1,2 выступают справа-снизу.
+								// Правая/нижняя граница d=1 = 172.8dp (12.8dp выступает за CELL_SIZE=160)
+								// Правая/нижняя граница d=2 = 184dp (24dp выступает, но ровно до соседней cell+gap)
+								val collapsedOffset: Float = when (d) {
+									0 -> 0f
+									1 -> 48f      // 48 + 124.8 = 172.8
+									2 -> 104f     // 104 + 80 = 184
+									else -> 104f
+								}
+								val dOffsetXDp: Float = if (isExpanded) d * 30f else collapsedOffset
+								val dOffsetYDp: Float = if (isExpanded) d * 30f else collapsedOffset
                                 val dOffsetYDp: Float = if (isExpanded) {
                                     d * 30f
                                 } else when (d) {
