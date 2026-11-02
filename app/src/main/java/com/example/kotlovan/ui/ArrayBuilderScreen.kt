@@ -24,9 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,7 +50,6 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
-import kotlin.math.min
 
 @Composable
 fun ArrayBuilderScreen(
@@ -76,13 +75,9 @@ fun ArrayBuilderScreen(
     var fileName by remember { mutableStateOf("array.zip") }
     var localCurrent by remember(aux) { mutableStateOf<Triple<Int, Int, Int>?>(null) }
     var centeredOnKey by remember(aux) { mutableStateOf("") }
-    // Какие (r,c) показываются в развёрнутом виде
     var expandedStacks by remember(aux) { mutableStateOf(setOf<Pair<Int, Int>>()) }
 
-    // При смене текущей ячейки — сбрасываем развёрнутые стеки
-    LaunchedEffect(localCurrent) {
-        expandedStacks = emptySet()
-    }
+    LaunchedEffect(localCurrent) { expandedStacks = emptySet() }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
@@ -167,11 +162,10 @@ fun ArrayBuilderScreen(
                             .size(CELL_SIZE.dp)
                     ) {
                         if (hasAny) {
-                            // Сортируем по возрастанию d для правильного порядка отрисовки
                             val sorted = stack.sortedBy { it.first }
 
                             for ((d, cell) in sorted) {
-                                if (!isExpanded && d > 2) continue   // показываем только 0,1,2
+                                if (!isExpanded && d > 2) continue
                                 val isSel = localCurrent?.let {
                                     it.first == r && it.second == c && it.third == d
                                 } == true
@@ -181,24 +175,9 @@ fun ArrayBuilderScreen(
                                                 selectedForSwap!!.third == d)
                                 val isSource = isSelectMode && r == selR && c == selC && d == selD
 
-                                // Размеры для свёрнутого стека: 100%, 78%, 50%
-                               
-                                }
-                                // Смещение: свёрнутый — «каскад» от top-left,
-                                // expanded — все ячейки каскадом d*30dp вправо-вниз
-								// Свёрнутый стек: d=0 заполняет ячейку, d=1,2 выступают справа-снизу.
-								// Правая/нижняя граница d=1 = 172.8dp (12.8dp выступает за CELL_SIZE=160)
-								// Правая/нижняя граница d=2 = 184dp (24dp выступает, но ровно до соседней cell+gap)
-								// Свёрнутый стек — каскад вправо-вверх:
-								//   d=0: (0, 60), size 100 → родитель смещён вниз-влево
-								//   d=1: (30, 30), size 100 → верхняя + правая полосы видны
-								//   d=2: (60, 0), size 100 → верхняя + правая полосы видны
-								// Expanded — каскад вправо, все по 160:
-								//   d=0: (0, 0), d=1: (40, 0), d=2: (80, 0) — налезают на соседей
-								val collapsedCellSize = CELL_SIZE - 2f * 30f   // = 100dp
-								val cellSizeDp: Float = if (isExpanded) CELL_SIZE else collapsedCellSize
-								val dOffsetXDp: Float = if (isExpanded) d * 40f else d * 30f
-								val dOffsetYDp: Float = if (isExpanded) 0f else (2 - d) * 30f
+                                val cellSizeDp: Float = if (isExpanded) CELL_SIZE else CELL_SIZE - 2f * 30f
+                                val dOffsetXDp: Float = if (isExpanded) d * 40f else d * 30f
+                                val dOffsetYDp: Float = if (isExpanded) 0f else (2 - d) * 30f
 
                                 CreatedCell(
                                     data = cell, vm = vm,
@@ -238,14 +217,13 @@ fun ArrayBuilderScreen(
                                             Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                                         }
                                     },
-									modifier = Modifier
-										.offset(x = dOffsetXDp.dp, y = dOffsetYDp.dp)
-										.size(cellSizeDp.dp)
-										.zIndex(100f - d.toFloat())
+                                    modifier = Modifier
+                                        .offset(x = dOffsetXDp.dp, y = dOffsetYDp.dp)
+                                        .size(cellSizeDp.dp)
+                                        .zIndex(100f - d.toFloat())
                                 )
                             }
 
-                            // Круг с количеством скрытых (если stack.size > 3 и не expanded)
                             if (hiddenCount > 0) {
                                 Box(
                                     Modifier
