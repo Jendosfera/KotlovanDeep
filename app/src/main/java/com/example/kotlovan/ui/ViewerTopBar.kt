@@ -3,7 +3,9 @@ package com.example.kotlovan.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,105 +64,120 @@ internal fun ViewerTopBar(
     onOpenReport: () -> Unit
 ) {
     val cfg = vm.config
-    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedIconButton(
-            onClick = onBack,
-            icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
-        )
-        Spacer(Modifier.weight(1f))
-        OutlinedIconButton(
-            onClick = onFlash,
-            icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
-        )
-        if (!inLinkMode) {
-            Spacer(Modifier.width(4.dp))
-            val photoIconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
-            val photoTint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
-            Box(
-                Modifier.size(44.dp).clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .clickable(onClick = onTogglePhoto),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = photoTint,
-                    modifier = Modifier.size(photoIconSize).alpha(cfg.iconOpacity))
-            }
-            if (maxDepth > 0) {
+    Box(Modifier.fillMaxWidth()) {
+        // === Правый верхний угол: фонарик, фото, замок, меню ===
+        Row(
+            Modifier.align(Alignment.TopEnd).padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedIconButton(
+                onClick = onFlash,
+                icon = Icons.Default.FlashOn, description = "Фонарик", iconModifier = iconMod
+            )
+            if (!inLinkMode) {
                 Spacer(Modifier.width(4.dp))
+                val photoIconSize = if (vm.photoModeActive) baseIconDp * 1.4f else baseIconDp
+                val photoTint = if (vm.photoModeActive) Color(0xFF4CAF50) else Color.White
                 Box(
                     Modifier.size(44.dp).clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f))
+                        .clickable(onClick = onTogglePhoto),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.PhotoCamera, "Фотофиксация", tint = photoTint,
+                        modifier = Modifier.size(photoIconSize).alpha(cfg.iconOpacity))
+                }
+                Spacer(Modifier.width(4.dp))
+                OutlinedIconButton(
+                    onClick = onToggleArray,
+                    icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
+                    description = "Массив", iconModifier = iconMod
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Box {
+                OutlinedIconButton(
+                    onClick = onMenuOpenToggle,
+                    icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
+                    if (inLinkMode) {
+                        DropdownMenuItem(text = { Text("Изменить привязку") }, onClick = {
+                            onMenuDismiss(); onChangeLink()
+                        })
+                    } else if (vm.photoModeActive) {
+                        DropdownMenuItem(text = { Text("Создать комментарий") }, onClick = {
+                            onMenuDismiss(); onPlaceComment()
+                        })
+                        DropdownMenuItem(text = { Text("Сохранить архив") }, onClick = {
+                            onMenuDismiss(); onSaveArchive()
+                        })
+                        DropdownMenuItem(text = { Text("Загрузить архив") }, onClick = {
+                            onMenuDismiss(); onLoadArchive()
+                        })
+                        DropdownMenuItem(text = { Text("Создать фотоотчет") }, onClick = {
+                            onMenuDismiss(); onOpenReport()
+                        })
+                        DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
+                            onMenuDismiss(); onSetCommonPoint()
+                        })
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = currentCell?.ownPosition ?: false,
+                                        onCheckedChange = null
+                                    )
+                                    Text("Свое положение")
+                                }
+                            },
+                            onClick = { onMenuDismiss(); onOwnPositionToggle() }
+                        )
+                    } else {
+                        DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
+                            onMenuDismiss(); onSetCommonPoint()
+                        })
+                        DropdownMenuItem(
+                            text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
+                            onClick = { onMenuDismiss(); onOwnPositionToggle() }
+                        )
+                        DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
+                            onMenuDismiss(); onPlaceComment()
+                        })
+                        DropdownMenuItem(text = { Text("Настройки") }, onClick = {
+                            onMenuDismiss(); onSettings()
+                        })
+                    }
+                }
+            }
+        }
+
+        // === Левый верхний угол: назад + переключатель слоёв ===
+        Column(
+            Modifier.align(Alignment.TopStart).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedIconButton(
+                onClick = onBack,
+                icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
+            )
+            if (maxDepth > 0 && !inLinkMode) {
+                // Увеличенная кнопка переключения слоёв (56dp против 44dp)
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
                         .background(YellowColor)
                         .border(5.dp, BlueColor, CircleShape)
                         .clickable(onClick = onToggleLayer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Layers, "Слой $depth/$maxDepth", tint = BlueColor)
-                }
-            }
-            Spacer(Modifier.width(4.dp))
-            OutlinedIconButton(
-                onClick = onToggleArray,
-                icon = if (vm.useAux) Icons.Default.LockOpen else Icons.Default.Lock,
-                description = "Массив", iconModifier = iconMod
-            )
-        }
-        Spacer(Modifier.width(4.dp))
-        Box {
-            OutlinedIconButton(
-                onClick = onMenuOpenToggle,
-                icon = Icons.Default.MoreVert, description = "Меню", iconModifier = iconMod
-            )
-            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
-                if (inLinkMode) {
-                    DropdownMenuItem(text = { Text("Изменить привязку") }, onClick = {
-                        onMenuDismiss(); onChangeLink()
-                    })
-                } else if (vm.photoModeActive) {
-                    // === Меню фотофиксации ===
-                    DropdownMenuItem(text = { Text("Создать комментарий") }, onClick = {
-                        onMenuDismiss(); onPlaceComment()
-                    })
-                    DropdownMenuItem(text = { Text("Сохранить архив") }, onClick = {
-                        onMenuDismiss(); onSaveArchive()
-                    })
-                    DropdownMenuItem(text = { Text("Загрузить архив") }, onClick = {
-                        onMenuDismiss(); onLoadArchive()
-                    })
-                    DropdownMenuItem(text = { Text("Создать фотоотчет") }, onClick = {
-                        onMenuDismiss(); onOpenReport()
-                    })
-                    DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
-                        onMenuDismiss(); onSetCommonPoint()
-                    })
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = currentCell?.ownPosition ?: false,
-                                    onCheckedChange = null
-                                )
-                                Text("Свое положение")
-                            }
-                        },
-                        onClick = {
-                            onMenuDismiss(); onOwnPositionToggle()
-                        }
+                    Icon(
+                        Icons.Default.Layers,
+                        "Слой $depth/$maxDepth",
+                        tint = BlueColor,
+                        modifier = Modifier.size(34.dp)
                     )
-                } else {
-                    // === Обычное меню ===
-                    DropdownMenuItem(text = { Text("Общая точка") }, onClick = {
-                        onMenuDismiss(); onSetCommonPoint()
-                    })
-                    DropdownMenuItem(
-                        text = { Text("Свое положение: ${currentCell?.ownPosition ?: false}") },
-                        onClick = { onMenuDismiss(); onOwnPositionToggle() }
-                    )
-                    DropdownMenuItem(text = { Text("Установить комментарий") }, onClick = {
-                        onMenuDismiss(); onPlaceComment()
-                    })
-                    DropdownMenuItem(text = { Text("Настройки") }, onClick = {
-                        onMenuDismiss(); onSettings()
-                    })
                 }
             }
         }

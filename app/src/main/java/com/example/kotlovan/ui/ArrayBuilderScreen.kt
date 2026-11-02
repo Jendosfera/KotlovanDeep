@@ -1,6 +1,5 @@
 package com.example.kotlovan.ui
 
-import androidx.compose.foundation.layout.offset
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,15 +16,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -43,10 +45,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
+import kotlin.math.min
 
 @Composable
 fun ArrayBuilderScreen(
@@ -72,6 +76,13 @@ fun ArrayBuilderScreen(
     var fileName by remember { mutableStateOf("array.zip") }
     var localCurrent by remember(aux) { mutableStateOf<Triple<Int, Int, Int>?>(null) }
     var centeredOnKey by remember(aux) { mutableStateOf("") }
+    // Какие (r,c) показываются в развёрнутом виде
+    var expandedStacks by remember(aux) { mutableStateOf(setOf<Pair<Int, Int>>()) }
+
+    // При смене текущей ячейки — сбрасываем развёрнутые стеки
+    LaunchedEffect(localCurrent) {
+        expandedStacks = emptySet()
+    }
 
     val bgColor = if (aux) Color(0xFFEDE7F6) else Color(0xFFECEFF1)
 
@@ -102,14 +113,11 @@ fun ArrayBuilderScreen(
                 intArrayOf(rows.min(), rows.max(), cols.min(), cols.max())
             }
         }
-        val rFrom = bounds[0] - 1
-        val rTo = bounds[1] + 1
-        val cFrom = bounds[2] - 1
-        val cTo = bounds[3] + 1
+        val rFrom = bounds[0] - 1; val rTo = bounds[1] + 1
+        val cFrom = bounds[2] - 1; val cTo = bounds[3] + 1
 
         val cellSizePx = with(density) { CELL_SIZE.dp.toPx() }
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
-        val titleHPx = with(density) { TITLE_H_DP.dp.toPx() }
         val step = cellSizePx + cellGapPx
 
         LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol, vm.active.lastDepth) {
@@ -139,10 +147,8 @@ fun ArrayBuilderScreen(
             Box(
                 Modifier.fillMaxSize().graphicsLayer {
                     transformOrigin = TransformOrigin(0f, 0f)
-                    translationX = offset.x
-                    translationY = offset.y
-                    scaleX = scale
-                    scaleY = scale
+                    translationX = offset.x; translationY = offset.y
+                    scaleX = scale; scaleY = scale
                 }
             ) {
                 for (r in rFrom..rTo) for (c in cFrom..cTo) {
@@ -152,17 +158,20 @@ fun ArrayBuilderScreen(
                     val hasAny = stack.isNotEmpty()
                     val isPlus = !hasAny && hasNeighbor(r, c, coords)
                     val isEmptyStart = !hasAny && coords.isEmpty() && r == 0 && c == 0
+                    val isExpanded = (r to c) in expandedStacks
+                    val hiddenCount = if (isExpanded) 0 else (stack.size - 3).coerceAtLeast(0)
 
                     Box(
-                        Modifier.graphicsLayer {
-                            translationX = xPx; translationY = yPx
-                        }.size(CELL_SIZE.dp)
+                        Modifier
+                            .graphicsLayer { translationX = xPx; translationY = yPx }
+                            .size(CELL_SIZE.dp)
                     ) {
                         if (hasAny) {
-                            val sorted = stack.sortedByDescending { it.first }
+                            // Сортируем по возрастанию d для правильного порядка отрисовки
+                            val sorted = stack.sortedBy { it.first }
+
                             for ((d, cell) in sorted) {
-                                val dOffsetX = d * titleHPx
-                                val dOffsetY = -d * titleHPx
+                                if (!isExpanded && d > 2) continue   // показываем только 0,1,2
                                 val isSel = localCurrent?.let {
                                     it.first == r && it.second == c && it.third == d
                                 } == true
@@ -171,6 +180,32 @@ fun ArrayBuilderScreen(
                                                 selectedForSwap!!.second == c &&
                                                 selectedForSwap!!.third == d)
                                 val isSource = isSelectMode && r == selR && c == selC && d == selD
+
+                                // Размеры для свёрнутого стека: 100%, 78%, 50%
+                                val sizeScale: Float = if (isExpanded) 1f else when (d) {
+                                    0 -> 1f
+                                    1 -> 0.78f
+                                    2 -> 0.5f
+                                    else -> 0.5f
+                                }
+                                // Смещение: свёрнутый — «каскад» от top-left,
+                                // expanded — все ячейки каскадом d*30dp вправо-вниз
+                                val dOffsetXDp: Float = if (isExpanded) {
+                                    d * 30f
+                                } else when (d) {
+                                    0 -> 0f
+                                    1 -> CELL_SIZE * (1f - 0.78f)   // 35.2
+                                    2 -> CELL_SIZE * (1f - 0.5f)    // 80
+                                    else -> CELL_SIZE * (1f - 0.5f)
+                                }
+                                val dOffsetYDp: Float = if (isExpanded) {
+                                    d * 30f
+                                } else when (d) {
+                                    0 -> 0f
+                                    1 -> CELL_SIZE * (1f - 0.78f)
+                                    2 -> CELL_SIZE * (1f - 0.5f)
+                                    else -> CELL_SIZE * (1f - 0.5f)
+                                }
 
                                 CreatedCell(
                                     data = cell, vm = vm,
@@ -210,11 +245,35 @@ fun ArrayBuilderScreen(
                                             Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                                         }
                                     },
-                                    modifier = Modifier.offset(
-                                        x = with(density) { dOffsetX.toDp() },
-                                        y = with(density) { dOffsetY.toDp() }
-                                    )
+                                    modifier = Modifier
+                                        .offset(x = dOffsetXDp.dp, y = dOffsetYDp.dp)
+                                        .size((CELL_SIZE * sizeScale).dp)
+                                        .zIndex(100f - d.toFloat())
                                 )
+                            }
+
+                            // Круг с количеством скрытых (если stack.size > 3 и не expanded)
+                            if (hiddenCount > 0) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = (-4).dp, y = 4.dp)
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Yellow)
+                                        .border(5.dp, Color.Black, CircleShape)
+                                        .zIndex(200f)
+                                        .clickable {
+                                            expandedStacks = expandedStacks + (r to c)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "+${hiddenCount}",
+                                        color = Color.Black,
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                                    )
+                                }
                             }
                         } else if (isPlus || isEmptyStart) {
                             PlusButton(

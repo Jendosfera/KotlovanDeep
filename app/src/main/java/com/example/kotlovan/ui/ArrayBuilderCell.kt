@@ -78,7 +78,7 @@ internal fun CreatedCell(
         Column(Modifier.fillMaxSize().padding(6.dp)) {
             Text(
                 if (data.title.isBlank())
-                    "Без названия" + if (depth > 0) " (вложенная)" else ""
+                    "Без названия" + if (depth > 0) " (d=$depth)" else ""
                 else data.title,
                 maxLines = 1,
                 style = MaterialTheme.typography.bodySmall
