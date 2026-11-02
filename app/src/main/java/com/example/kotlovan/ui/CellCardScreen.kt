@@ -51,8 +51,6 @@ import coil.compose.AsyncImage
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.vm.AppViewModel
 
-
-
 @Composable
 fun CellCardScreen(
     nav: NavHostController, vm: AppViewModel,
@@ -61,6 +59,7 @@ fun CellCardScreen(
     val existing = vm.cell(row, col, depth)
     val maxDepth = vm.depthAt(row, col)
     val hasStack = maxDepth > 0
+    val hasParent = depth > 0
 
     var title by remember(depth) { mutableStateOf(existing?.title ?: "") }
     var titleTouched by remember(depth) { mutableStateOf(!existing?.title.isNullOrBlank()) }
@@ -86,7 +85,7 @@ fun CellCardScreen(
                 Icon(Icons.Default.ArrowBack, "Назад")
             }
             Text(
-                "Ячейка [$row,$col${if (depth > 0) ",d=$depth" else ""}]",
+                "Ячейка [$row,$col${if (depth > 0) ", d=$depth" else ""}]",
                 style = MaterialTheme.typography.titleLarge
             )
             Spacer(Modifier.weight(1f))
@@ -98,6 +97,8 @@ fun CellCardScreen(
         }
 
         Spacer(Modifier.height(12.dp))
+
+        // Контейнер названия — жёлтый + синяя кайма
         Box(
             Modifier.fillMaxWidth()
                 .background(Yellow, RoundedCornerShape(8.dp))
@@ -110,11 +111,10 @@ fun CellCardScreen(
             )
         }
 
-        // Переключение между d-слоями
+        // Переключение между слоями
         if (hasStack) {
             Spacer(Modifier.height(8.dp))
-            val dLabel = if (maxDepth > 0)
-                "Вложенная ячейка (${depth}/${maxDepth})" else ""
+            val dLabel = "Вложенная ячейка ($depth/$maxDepth)"
             Button(
                 onClick = {
                     val next = if (depth >= maxDepth) 0 else depth + 1
@@ -132,27 +132,23 @@ fun CellCardScreen(
             }
         }
 
-        // Сделать вложенной (только для d=0 и если нет вложений)
-        if (depth == 0 && maxDepth <= 0) {
+        // Перейти к главной (для подложки)
+        if (hasParent) {
             Spacer(Modifier.height(6.dp))
             Button(
                 onClick = {
-                    val base = existing ?: CellData()
-                    vm.upsertCell(row, col, base.copy(
-                        title = title, imageFile = imageFile, imageUri = null,
-                        imageWidth = imgW, imageHeight = imgH
-                    ), 0)
-                    vm.autosave()
-                    nav.navigate("builder?aux=${vm.useAux}&selectForNested=$row,$col,0")
+                    nav.navigate("card/$row/$col?depth=0") {
+                        popUpTo("card/$row/$col?depth=$depth") { inclusive = true }
+                    }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
                 border = BorderStroke(7.dp, Blue),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Сделать вложенной") }
-        }
-
-        // Отделить от родителя (для d>0)
-        if (depth > 0) {
+            ) {
+                Icon(Icons.Default.Layers, null)
+                Spacer(Modifier.size(6.dp))
+                Text("Перейти к главной (d=0)")
+            }
             Spacer(Modifier.height(6.dp))
             Button(
                 onClick = {
@@ -168,9 +164,34 @@ fun CellCardScreen(
             ) { Text("Отделить от родителя") }
         }
 
+        // Сделать вложенной (только для d=0 и если нет вложенных)
+        if (depth == 0 && maxDepth <= 0) {
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = {
+                    val base = existing ?: CellData()
+                    vm.upsertCell(row, col, base.copy(
+                        title = title, imageFile = imageFile, imageUri = null,
+                        imageWidth = imgW, imageHeight = imgH
+                    ), 0)
+                    vm.autosave()
+                    // ВАЖНО: передаём "row,col,0" в selectForNested
+                    nav.navigate("builder?aux=${vm.useAux}&selectForNested=$row,$col,0")
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
+                border = BorderStroke(7.dp, Blue),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Сделать вложенной") }
+        }
+
         Spacer(Modifier.height(16.dp))
+
+        // Контейнер изображения
         Box(
-            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(12.dp))
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFFECEFF1))
                 .pointerInput(imageFile) {
                     detectTapGestures(
@@ -182,25 +203,34 @@ fun CellCardScreen(
         ) {
             val f = imageFile
             if (f != null) {
-                AsyncImage(model = vm.repo.imageFile(f), contentDescription = null,
-                    contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                AsyncImage(
+                    model = vm.repo.imageFile(f),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
                 Canvas(Modifier.size(120.dp)) {
                     val r = size.minDimension * 0.4f
                     val c = center
                     drawCircle(
                         color = Color.Gray, radius = r, center = c,
-                        style = Stroke(width = 3.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f))
+                        style = Stroke(
+                            width = 3.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
+                        )
                     )
                     val plus = r * 0.5f
                     val sw = 3.dp.toPx()
                     drawLine(Color.Gray, c + Offset(-plus, 0f), c + Offset(plus, 0f), sw)
                     drawLine(Color.Gray, c + Offset(0f, -plus), c + Offset(0f, plus), sw)
                 }
-                Text("Однократный тап — загрузить\nДвойной — заменить",
-                    color = Color.Gray, style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                Text(
+                    "Однократный тап — загрузить\nДвойной — заменить",
+                    color = Color.Gray,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
+                )
             }
         }
 

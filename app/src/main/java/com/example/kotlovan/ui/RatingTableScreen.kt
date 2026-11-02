@@ -127,7 +127,7 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                                 detectTapGestures(onDoubleTap = {
                                     vm.lastRatingRow = idx
                                     vm.useAux = r.isAux
-                                    vm.photoModeActive = vm.photoModeActive
+                                    
                                     nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}?depth=${r.depth}")
                                 })
                             }
