@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import kotlinx.coroutines.delay
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -94,7 +95,23 @@ fun CommentEditorScreen(
     var viewPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
-
+	// Автосохранение при любом изменении (с задержкой)
+	LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
+		delay(400)
+		val curCell = vm.cell(row, col, depth) ?: return@LaunchedEffect
+		val curPin = curCell.comments.firstOrNull { it.id == id } ?: return@LaunchedEffect
+		if (curPin.title == title && curPin.text == text &&
+			curPin.shortLabel == shortLabel && curPin.color == color &&
+			curPin.iconType == iconType && curPin.photos == photos &&
+			curPin.rating == rating) return@LaunchedEffect
+		vm.setComments(row, col, curCell.comments.map {
+			if (it.id == id) it.copy(
+				title = title, text = text, shortLabel = shortLabel,
+				color = color, iconType = iconType, photos = photos, rating = rating
+			) else it
+		}, depth)
+		vm.autosave()
+	}
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->

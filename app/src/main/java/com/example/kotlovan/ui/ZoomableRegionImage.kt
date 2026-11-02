@@ -74,12 +74,14 @@ fun ZoomableRegionImage(
 
         if (srcRight <= srcLeft || srcBottom <= srcTop) return@LaunchedEffect
 
-        val rect = Rect(
-            srcLeft.roundToInt().coerceIn(0, imageW - 1),
-            srcTop.roundToInt().coerceIn(0, imageH - 1),
-            srcRight.roundToInt().coerceIn(1, imageW),
-            srcBottom.roundToInt().coerceIn(1, imageH)
-        )
+		val padX = (srcRight - srcLeft) * 0.25f
+		val padY = (srcBottom - srcTop) * 0.25f
+		val rect = Rect(
+			(srcLeft - padX).roundToInt().coerceIn(0, imageW - 1),
+			(srcTop - padY).roundToInt().coerceIn(0, imageH - 1),
+			(srcRight + padX).roundToInt().coerceIn(1, imageW),
+			(srcBottom + padY).roundToInt().coerceIn(1, imageH)
+		)
         if (rect.width() <= 0 || rect.height() <= 0) return@LaunchedEffect
 
         val bmp = withContext(Dispatchers.IO) {

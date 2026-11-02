@@ -210,7 +210,19 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 return@LaunchedEffect
             }
             if (row == savedRow && col == savedCol) return@LaunchedEffect
-            val c = vm.cell(row, col, depth) ?: return@LaunchedEffect
+            val c = vm.cell(row, col, depth)
+			if (c == null) {
+				// Ячейка исчезла — пробуем найти первую доступную
+				val firstKey = vm.active.cells.keys.minByOrNull { it }
+				if (firstKey != null) {
+					val parts = firstKey.split(",")
+					row = parts.getOrNull(0)?.toIntOrNull() ?: 0
+					col = parts.getOrNull(1)?.toIntOrNull() ?: 0
+					depth = 0
+					savedRow = -1; savedCol = -1
+				}
+				return@LaunchedEffect
+			}
             val (s, vOx, vOy) = if (c.ownPosition) {
                 Triple(c.ownScale, c.ownOffsetX, c.ownOffsetY)
             } else {
@@ -419,14 +431,27 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     savedRow = -1; savedCol = -1
                     pendingJump = null
                 },
-                onToggleArray = {
-                    persistViewport()
-                    vm.useAux = !vm.useAux
-                    val t = vm.active
-                    savedRow = -1; savedCol = -1
-                    row = t.lastRow; col = t.lastCol; depth = 0
-                    pendingJump = null
-                },
+				onToggleArray = {
+					persistViewport()
+					vm.useAux = !vm.useAux
+					val t = vm.active
+					var targetRow = t.lastRow
+					var targetCol = t.lastCol
+					// Если lastRow/lastCol не существует — найти первую валидную
+					if (t.cell(targetRow, targetCol, 0) == null) {
+						val firstKey = t.cells.keys.minByOrNull { it }
+						if (firstKey != null) {
+							val parts = firstKey.split(",")
+							targetRow = parts.getOrNull(0)?.toIntOrNull() ?: 0
+							targetCol = parts.getOrNull(1)?.toIntOrNull() ?: 0
+						} else {
+							targetRow = 0; targetCol = 0
+						}
+					}
+					savedRow = -1; savedCol = -1
+					row = targetRow; col = targetCol; depth = 0
+					pendingJump = null
+				},
                 onMenuOpenToggle = { menuOpen = !menuOpen },
                 onMenuDismiss = { menuOpen = false },
                 onChangeLink = {
