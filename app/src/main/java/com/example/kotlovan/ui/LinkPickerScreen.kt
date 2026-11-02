@@ -63,13 +63,12 @@ fun LinkPickerScreen(
     vm: AppViewModel,
     comRow: Int,
     comCol: Int,
-    commentId: String
+    commentId: String,
+    comDepth: Int = 0
 ) {
     val originalUseAux = remember { vm.useAux }
     DisposableEffect(Unit) {
-        onDispose {
-            try { vm.useAux = originalUseAux } catch (_: Throwable) {}
-        }
+        onDispose { try { vm.useAux = originalUseAux } catch (_: Throwable) {} }
     }
 
     var row by remember { mutableIntStateOf(vm.active.lastRow) }
@@ -78,9 +77,8 @@ fun LinkPickerScreen(
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
-    // Если стартовой ячейки нет — берём первую доступную
     LaunchedEffect(vm.useAux) {
-        if (vm.cell(row, col) == null) {
+        if (vm.cell(row, col, 0) == null) {
             val cells = vm.active.cells.keys
             if (cells.isNotEmpty()) {
                 val k = cells.first()
@@ -98,7 +96,7 @@ fun LinkPickerScreen(
         val containerH = constraints.maxHeight.toFloat()
         val density = LocalDensity.current
 
-        val currentCell = vm.cell(row, col)
+        val currentCell = vm.cell(row, col, 0)
         val imageW = currentCell?.imageWidth ?: 0
         val imageH = currentCell?.imageHeight ?: 0
         val fitScale = if (imageW > 0 && imageH > 0)
@@ -106,13 +104,13 @@ fun LinkPickerScreen(
         val fitW = if (imageW > 0) imageW * fitScale else containerW
         val fitH = if (imageH > 0) imageH * fitScale else containerH
 
-        val allRows = vm.active.cells.keys.mapNotNull { it.substringBefore(',').toIntOrNull() }
-        val allCols = vm.active.cells.keys.mapNotNull { it.substringAfter(',').toIntOrNull() }
+        val allRows = vm.active.cells.keys.mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }
+        val allCols = vm.active.cells.keys.mapNotNull { it.split(",").getOrNull(1)?.toIntOrNull() }
         val rowRange = if (allRows.isEmpty()) 0..0 else allRows.min()..allRows.max()
         val colRange = if (allCols.isEmpty()) 0..0 else allCols.min()..allCols.max()
 
         LaunchedEffect(row, col, fitW, fitH, vm.useAux) {
-            val c = vm.cell(row, col) ?: run {
+            val c = vm.cell(row, col, 0) ?: run {
                 scale = 1f; offsetX = 0f; offsetY = 0f
                 return@LaunchedEffect
             }
@@ -143,7 +141,7 @@ fun LinkPickerScreen(
                             } else {
                                 if (dy < 0) { nr = row + 1; nc = col } else { nr = row - 1; nc = col }
                             }
-                            if (vm.cell(nr, nc) != null) { row = nr; col = nc }
+                            if (vm.cell(nr, nc, 0) != null) { row = nr; col = nc }
                         }
                     )
                 }
@@ -161,7 +159,6 @@ fun LinkPickerScreen(
             }
         }
 
-        // Чёрный прицел
         Canvas(Modifier.align(Alignment.Center).size(48.dp)) {
             val cx = size.width / 2
             val cy = size.height / 2
@@ -194,7 +191,7 @@ fun LinkPickerScreen(
                 onClick = {
                     vm.useAux = !vm.useAux
                     val t = vm.active
-                    if (t.cell(t.lastRow, t.lastCol) != null) {
+                    if (t.cell(t.lastRow, t.lastCol, 0) != null) {
                         row = t.lastRow; col = t.lastCol
                     } else if (t.cells.isNotEmpty()) {
                         val k = t.cells.keys.first()
@@ -217,7 +214,7 @@ fun LinkPickerScreen(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (r in rowRange) {
-                val has = vm.cell(r, col) != null
+                val has = vm.cell(r, col, 0) != null
                 SideButton(
                     text = vm.active.rowLabels[r] ?: "R${r + 1}",
                     selected = (r == row), dimmed = !has,
@@ -233,7 +230,7 @@ fun LinkPickerScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             for (c in colRange) {
-                val has = vm.cell(row, c) != null
+                val has = vm.cell(row, c, 0) != null
                 SideButton(
                     text = vm.active.colLabels[c] ?: "C${c + 1}",
                     selected = (c == col), dimmed = !has,
@@ -243,29 +240,27 @@ fun LinkPickerScreen(
         }
 
         OutlinedIconButton(
-			onClick = {
-				val cell = vm.cell(row, col)
-				if (cell == null || imageW <= 0 || imageH <= 0) {
-					try { vm.useAux = originalUseAux } catch (_: Throwable) {}
-					nav.popBackStack()
-					return@OutlinedIconButton
-				}
-				val imgX = (containerW / 2f - offsetX) / scale.coerceAtLeast(0.01f)
-				val imgY = (containerH / 2f - offsetY) / scale.coerceAtLeast(0.01f)
-				val nx = (imgX / fitW).coerceIn(0f, 1f)
-				val ny = (imgY / fitH).coerceIn(0f, 1f)
-				val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
-				vm.setCommentLink(comRow, comCol, commentId, newLink)
-				if (vm.linkReturn != null) vm.pendingRejump = newLink
-
-				// КРИТИЧНО: вернуть исходный массив до popBackStack
-				try { vm.useAux = originalUseAux } catch (_: Throwable) {}
-				nav.popBackStack()
-			},
-			icon = Icons.Default.Check,
-			description = "OK",
-			modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-		)
+            onClick = {
+                val cell = vm.cell(row, col, 0)
+                if (cell == null || imageW <= 0 || imageH <= 0) {
+                    try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+                    nav.popBackStack()
+                    return@OutlinedIconButton
+                }
+                val imgX = (containerW / 2f - offsetX) / scale.coerceAtLeast(0.01f)
+                val imgY = (containerH / 2f - offsetY) / scale.coerceAtLeast(0.01f)
+                val nx = (imgX / fitW).coerceIn(0f, 1f)
+                val ny = (imgY / fitH).coerceIn(0f, 1f)
+                val newLink = PinLink(vm.useAux, row, col, nx, ny, scale)
+                vm.setCommentLink(comRow, comCol, commentId, newLink, comDepth)
+                if (vm.linkReturn != null) vm.pendingRejump = newLink
+                try { vm.useAux = originalUseAux } catch (_: Throwable) {}
+                nav.popBackStack()
+            },
+            icon = Icons.Default.Check,
+            description = "OK",
+            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+        )
     }
 }
 

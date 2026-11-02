@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +29,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,31 +52,30 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     val yellow = Color(0xFFFFEB3B)
     val blue = Color(0xFF1565C0)
 
-    // Собираем все комментарии
-	val rows = remember(
-		vm.config.main.cells, vm.config.aux.cells,
-		vm.config.photoMain.cells, vm.config.photoAux.cells,
-		vm.photoModeActive
-	) {
-		val list = mutableListOf<RatingRow>()
-		fun collect(cells: Map<String, com.example.kotlovan.data.CellData>, isAux: Boolean) {
-			for ((k, c) in cells) {
-				val p = k.split(",")
-				val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-				val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
-				val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
-				for (pin in c.comments) list += RatingRow(pin, r, cc, dd, isAux)
-			}
-		}
-		if (vm.photoModeActive) {
-			collect(vm.config.photoMain.cells, false)
-			collect(vm.config.photoAux.cells, true)
-		} else {
-			collect(vm.config.main.cells, false)
-			collect(vm.config.aux.cells, true)
-		}
-		list.sortedByDescending { it.pin.rating }
-	}
+    val rows = remember(
+        vm.config.main.cells, vm.config.aux.cells,
+        vm.config.photoMain.cells, vm.config.photoAux.cells,
+        vm.photoModeActive
+    ) {
+        val list = mutableListOf<RatingRow>()
+        fun collect(cells: Map<String, com.example.kotlovan.data.CellData>, isAux: Boolean) {
+            for ((k, c) in cells) {
+                val p = k.split(",")
+                val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+                val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
+                val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
+                for (pin in c.comments) list += RatingRow(pin, r, cc, dd, isAux)
+            }
+        }
+        if (vm.photoModeActive) {
+            collect(vm.config.photoMain.cells, false)
+            collect(vm.config.photoAux.cells, true)
+        } else {
+            collect(vm.config.main.cells, false)
+            collect(vm.config.aux.cells, true)
+        }
+        list.sortedByDescending { it.pin.rating }
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(vm.lastRatingRow) {
@@ -92,12 +89,13 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     Box(Modifier.fillMaxSize().background(yellow).border(7.dp, blue)) {
         Column(Modifier.fillMaxSize().padding(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Назад", tint = blue) }
+                IconButton(onClick = { nav.popBackStack() }) {
+                    Icon(Icons.Default.ArrowBack, "Назад", tint = blue)
+                }
                 Text("Рейтинг комментариев", color = blue, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
 
-            // Заголовок таблицы
             Row(
                 Modifier.fillMaxWidth().background(yellow).border(3.dp, Color.Black).padding(4.dp)
             ) {
@@ -107,7 +105,6 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                 Text("Столбец", Modifier.width(80.dp), color = Color.Black, fontWeight = FontWeight.Bold)
             }
 
-            // Данные
             LazyColumn(Modifier.weight(1f).border(3.dp, Color.Black), state = listState) {
                 items(rows.size) { idx ->
                     val r = rows[idx]
@@ -118,7 +115,6 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                             .padding(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Рейтинг
                         Box(
                             Modifier.width(70.dp).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = { editRating = r })
@@ -126,37 +122,47 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                             contentAlignment = Alignment.Center
                         ) { Text("${r.pin.rating}", color = Color.Black, fontWeight = FontWeight.Bold) }
 
-                        // Название
                         Box(
                             Modifier.weight(1f).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = {
                                     vm.lastRatingRow = idx
                                     vm.useAux = r.isAux
-                                    nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}/?depth=${r.depth}")
+                                    vm.photoModeActive = vm.photoModeActive
+                                    nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}?depth=${r.depth}")
                                 })
                             }
                         ) {
                             Text(r.pin.title.ifBlank { "Комментарий" }, color = Color.Black)
                         }
 
-                        // Строка
                         Box(
                             Modifier.width(80.dp).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = { showRowsDialog = true })
                             }
                         ) {
-                            Text(vm.config.main.rowLabels[r.row] ?: vm.config.aux.rowLabels[r.row] ?: "R${r.row + 1}",
-                                color = Color.Black)
+                            Text(
+                                vm.config.main.rowLabels[r.row]
+                                    ?: vm.config.aux.rowLabels[r.row]
+                                    ?: vm.config.photoMain.rowLabels[r.row]
+                                    ?: vm.config.photoAux.rowLabels[r.row]
+                                    ?: "R${r.row + 1}",
+                                color = Color.Black
+                            )
                         }
 
-                        // Столбец
                         Box(
                             Modifier.width(80.dp).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = { showColsDialog = true })
                             }
                         ) {
-                            Text(vm.config.main.colLabels[r.col] ?: vm.config.aux.colLabels[r.col] ?: "C${r.col + 1}",
-                                color = Color.Black)
+                            Text(
+                                vm.config.main.colLabels[r.col]
+                                    ?: vm.config.aux.colLabels[r.col]
+                                    ?: vm.config.photoMain.colLabels[r.col]
+                                    ?: vm.config.photoAux.colLabels[r.col]
+                                    ?: "C${r.col + 1}",
+                                color = Color.Black
+                            )
                         }
                     }
                 }
@@ -164,7 +170,6 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Диалог редактирования рейтинга
     editRating?.let { r ->
         var text by remember(r.pin.id) { mutableStateOf(r.pin.rating.toString()) }
         AlertDialog(
@@ -181,17 +186,13 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
             confirmButton = {
                 TextButton(onClick = {
                     val newVal = text.toIntOrNull() ?: r.pin.rating
-                    val sub = if (r.isAux) vm.config.aux else vm.config.main
-                    val key = sub.key(r.row, r.col)
-                    val cell = sub.cell(r.row, r.col)
-                    if (cell != null) {
-                        val updated = cell.copy(comments = cell.comments.map {
+                    vm.useAux = r.isAux
+                    vm.updateCell(r.row, r.col, r.depth) { cell ->
+                        cell.copy(comments = cell.comments.map {
                             if (it.id == r.pin.id) it.copy(rating = newVal) else it
                         })
-                        vm.useAux = r.isAux
-                        vm.upsertCell(r.row, r.col, updated)
-                        vm.autosave()
                     }
+                    vm.autosave()
                     editRating = null
                 }) { Text("OK") }
             },
@@ -200,7 +201,8 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     }
 
     if (showRowsDialog) {
-        val allRows = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
+        val allRows = (vm.config.main.cells.keys + vm.config.aux.cells.keys +
+                vm.config.photoMain.cells.keys + vm.config.photoAux.cells.keys)
             .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }.distinct().sorted()
         AlertDialog(
             onDismissRequest = { showRowsDialog = false },
@@ -224,8 +226,9 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
     }
 
     if (showColsDialog) {
-        val allCols = (vm.config.main.cells.keys + vm.config.aux.cells.keys)
-            .mapNotNull { it.split(",").getOrNull(0)?.toIntOrNull() }.distinct().sorted()
+        val allCols = (vm.config.main.cells.keys + vm.config.aux.cells.keys +
+                vm.config.photoMain.cells.keys + vm.config.photoAux.cells.keys)
+            .mapNotNull { it.split(",").getOrNull(1)?.toIntOrNull() }.distinct().sorted()
         AlertDialog(
             onDismissRequest = { showColsDialog = false },
             containerColor = yellow,

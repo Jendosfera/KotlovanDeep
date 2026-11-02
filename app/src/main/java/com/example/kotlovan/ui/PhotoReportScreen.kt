@@ -47,40 +47,43 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
+import com.example.kotlovan.data.SubArray
 import com.example.kotlovan.vm.AppViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-
-private val Red = Color(0xFFF44336)
+private val Yellow = Color(0xFFFFEB3B)
+private val BlueC = Color(0xFF1565C0)
+private val RedC = Color(0xFFF44336)
 
 @Composable
 fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
-    val archive = remember(vm.config.photoMain, vm.config.photoAux) {
-		// Объединяем photoMain и photoAux в один SubArray для отчёта
-		val mergedCells = LinkedHashMap<String, com.example.kotlovan.data.CellData>()
-		mergedCells.putAll(vm.config.photoMain.cells)
-		mergedCells.putAll(vm.config.photoAux.cells)
-		com.example.kotlovan.data.SubArray(
-			cells = mergedCells,
-			rowLabels = vm.config.photoMain.rowLabels + vm.config.photoAux.rowLabels,
-			colLabels = vm.config.photoMain.colLabels + vm.config.photoAux.colLabels
-		)
-	}
 
-	val allPins = remember(archive) {
-		val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
-		for ((k, cell) in archive.cells) {
-			val p = k.split(",")
-			val r = p.getOrNull(0)?.toIntOrNull() ?: continue
-			val c = p.getOrNull(1)?.toIntOrNull() ?: continue
-			for (pin in cell.comments) list += (r to c) to pin
-		}
-		list
-	}
+    val archive: SubArray = remember(vm.config.photoMain, vm.config.photoAux) {
+        val merged = LinkedHashMap<String, CellData>()
+        merged.putAll(vm.config.photoMain.cells)
+        merged.putAll(vm.config.photoAux.cells)
+        SubArray(
+            cells = merged,
+            rowLabels = vm.config.photoMain.rowLabels + vm.config.photoAux.rowLabels,
+            colLabels = vm.config.photoMain.colLabels + vm.config.photoAux.colLabels
+        )
+    }
+
+    val allPins = remember(archive) {
+        val list = mutableListOf<Pair<Pair<Int, Int>, CommentPin>>()
+        for ((k, cell) in archive.cells) {
+            val p = k.split(",")
+            val r = p.getOrNull(0)?.toIntOrNull() ?: continue
+            val c = p.getOrNull(1)?.toIntOrNull() ?: continue
+            for (pin in cell.comments) list += (r to c) to pin
+        }
+        list
+    }
     val minDate = allPins.minOfOrNull { it.second.createdAt } ?: 0L
     val maxDate = allPins.maxOfOrNull { it.second.createdAt } ?: System.currentTimeMillis()
 
@@ -131,7 +134,7 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
                 Spacer(Modifier.weight(1f))
                 Box(
                     Modifier.size(44.dp).clip(CircleShape)
-                        .background(Red).border(7.dp, Color.Black, CircleShape)
+                        .background(RedC).border(7.dp, Color.Black, CircleShape)
                         .clickable { nav.popBackStack() },
                     contentAlignment = Alignment.Center
                 ) { Text("×", color = Color.Black, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
@@ -270,14 +273,14 @@ fun PhotoReportScreen(nav: NavHostController, vm: AppViewModel) {
                         dateTo = maxOf(f, t)
                         showFilterDialog = false
                     } catch (_: Exception) {}
-                }) { Text("Применить", color = Blue) }
+                }) { Text("Применить", color = BlueC) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     dateFrom = minDate
                     dateTo = maxDate
                     showFilterDialog = false
-                }) { Text("Сброс", color = Red) }
+                }) { Text("Сброс", color = RedC) }
             }
         )
     }
