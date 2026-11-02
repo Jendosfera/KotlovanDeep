@@ -55,7 +55,8 @@ data class CellData(
     val commonY: Float = 0.5f,
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
-    val ownOffsetY: Float = 0f
+    val ownOffsetY: Float = 0f,
+	val nestedLevelLabels: Map<Int, String> = emptyMap()
 )
 
 @Serializable

@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,11 +18,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -29,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,6 +49,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
@@ -56,8 +62,8 @@ fun CellCardScreen(
     row: Int, col: Int, depth: Int = 0
 ) {
     val existing = vm.cell(row, col, depth)
+    val rootCell = vm.cell(row, col, 0)
     val maxDepth = vm.depthAt(row, col)
-    val hasStack = maxDepth > 0
     val hasParent = depth > 0
 
     var title by remember(depth) { mutableStateOf(existing?.title ?: "") }
@@ -65,6 +71,7 @@ fun CellCardScreen(
     var imageFile by remember(depth) { mutableStateOf(existing?.imageFile) }
     var imgW by remember(depth) { mutableIntStateOf(existing?.imageWidth ?: 0) }
     var imgH by remember(depth) { mutableIntStateOf(existing?.imageHeight ?: 0) }
+    var labelLevel by remember { mutableStateOf<Int?>(null) }
 
     val pickLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -96,77 +103,10 @@ fun CellCardScreen(
             }) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // Контейнер названия — жёлтый + синяя кайма
-        Box(
-            Modifier.fillMaxWidth()
-                .background(Yellow, RoundedCornerShape(8.dp))
-                .border(7.dp, Blue, RoundedCornerShape(8.dp))
-                .padding(4.dp)
-        ) {
-            OutlinedTextField(
-                value = title, onValueChange = { title = it; titleTouched = true },
-                label = { Text("Название") }, modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        // Переключение между слоями стека
-        if (hasStack) {
-            Spacer(Modifier.height(8.dp))
-            val dLabel = "Вложенная ячейка ($depth/$maxDepth)"
-            Button(
-                onClick = {
-                    val next = if (depth >= maxDepth) 0 else depth + 1
-                    nav.navigate("card/$row/$col?depth=$next") {
-                        popUpTo("card/$row/$col?depth=$depth") { inclusive = true }
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
-                border = BorderStroke(7.dp, Blue),
-                modifier = Modifier.fillMaxWidth().height(56.dp)
-            ) {
-                Icon(Icons.Default.Layers, null)
-                Spacer(Modifier.size(6.dp))
-                Text(dLabel)
-            }
-        }
-
-        // Перейти к главной (для подложки)
-        if (hasParent) {
-            Spacer(Modifier.height(6.dp))
-            Button(
-                onClick = {
-                    nav.navigate("card/$row/$col?depth=0") {
-                        popUpTo("card/$row/$col?depth=$depth") { inclusive = true }
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
-                border = BorderStroke(7.dp, Blue),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Icon(Icons.Default.Layers, null)
-                Spacer(Modifier.size(6.dp))
-                Text("Перейти к главной (d=0)")
-            }
-            Spacer(Modifier.height(6.dp))
-            Button(
-                onClick = {
-                    vm.unnest(row, col, depth)
-                    vm.autosave()
-                    nav.popBackStack()
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFCDD2), contentColor = Color.Black
-                ),
-                border = BorderStroke(7.dp, Color.Black),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Отделить от родителя") }
-        }
-
-        // Сделать вложенной (только d=0 без вложенных)
-        if (depth == 0 && maxDepth <= 0) {
-            Spacer(Modifier.height(6.dp))
+        // === Кнопка "Вложить" — ВСЕГДА для d=0, вверху карточки ===
+        if (depth == 0) {
             Button(
                 onClick = {
                     val base = existing ?: CellData()
@@ -179,13 +119,103 @@ fun CellCardScreen(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
                 border = BorderStroke(7.dp, Blue),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Сделать вложенной") }
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Icon(Icons.Default.Layers, null)
+                Spacer(Modifier.size(6.dp))
+                Text("Вложить")
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // === Маленькие кнопки уровней d=1..maxDepth ===
+        if (depth == 0 && maxDepth > 0) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                for (level in 1..maxDepth) {
+                    val lbl = rootCell?.nestedLevelLabels?.get(level).orEmpty()
+                        .ifBlank { "d=$level" }
+                    Box(
+                        Modifier
+                            .height(44.dp)
+                            .width(64.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Yellow)
+                            .border(4.dp, Blue, RoundedCornerShape(8.dp))
+                            .pointerInput(level, rootCell?.nestedLevelLabels) {
+                                detectTapGestures(
+                                    onTap = {
+                                        nav.navigate("card/$row/$col?depth=$level") {
+                                            popUpTo("card/$row/$col?depth=0") { inclusive = true }
+                                        }
+                                    },
+                                    onLongPress = { labelLevel = level }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            lbl, color = Blue,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // === Контейнер названия — жёлтый + синяя кайма ===
+        Box(
+            Modifier.fillMaxWidth()
+                .background(Yellow, RoundedCornerShape(8.dp))
+                .border(7.dp, Blue, RoundedCornerShape(8.dp))
+                .padding(4.dp)
+        ) {
+            OutlinedTextField(
+                value = title, onValueChange = { title = it; titleTouched = true },
+                label = { Text("Название") }, modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // === Переход к главной + отделить (для d>0) ===
+        if (hasParent) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        nav.navigate("card/$row/$col?depth=0") {
+                            popUpTo("card/$row/$col?depth=$depth") { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
+                    border = BorderStroke(7.dp, Blue),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("К главной", maxLines = 1) }
+                Button(
+                    onClick = {
+                        vm.unnest(row, col, depth)
+                        vm.autosave()
+                        nav.popBackStack()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFCDD2), contentColor = Color.Black
+                    ),
+                    border = BorderStroke(7.dp, Color.Black),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Отделить", maxLines = 1) }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Контейнер изображения
+        // === Контейнер изображения ===
         Box(
             Modifier
                 .fillMaxWidth()
@@ -251,5 +281,37 @@ fun CellCardScreen(
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) { Text("Подтвердить") }
         }
+    }
+
+    // === Диалог названия кнопки уровня ===
+    labelLevel?.let { lvl ->
+        val currentLbl = rootCell?.nestedLevelLabels?.get(lvl).orEmpty()
+        var text by remember(lvl, currentLbl) { mutableStateOf(currentLbl) }
+        AlertDialog(
+            onDismissRequest = { labelLevel = null },
+            containerColor = Yellow,
+            title = { Text("Название кнопки d=$lvl", color = Blue) },
+            text = {
+                OutlinedTextField(
+                    value = text, onValueChange = { if (it.length <= 8) text = it },
+                    label = { Text("Название") },
+                    supportingText = { Text("${text.length}/8") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.updateCell(row, col, 0) { cell ->
+                        cell.copy(nestedLevelLabels =
+                            if (text.isBlank()) cell.nestedLevelLabels - lvl
+                            else cell.nestedLevelLabels + (lvl to text))
+                    }
+                    vm.autosave()
+                    labelLevel = null
+                }) { Text("OK", color = Blue) }
+            },
+            dismissButton = {
+                TextButton(onClick = { labelLevel = null }) { Text("Отмена") }
+            }
+        )
     }
 }

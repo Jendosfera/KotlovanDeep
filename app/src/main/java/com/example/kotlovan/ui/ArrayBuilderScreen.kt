@@ -182,26 +182,23 @@ fun ArrayBuilderScreen(
                                 val isSource = isSelectMode && r == selR && c == selC && d == selD
 
                                 // Размеры для свёрнутого стека: 100%, 78%, 50%
-                                val sizeScale: Float = if (isExpanded) 1f else when (d) {
-                                    0 -> 1f
-                                    1 -> 0.78f
-                                    2 -> 0.5f
-                                    else -> 0.5f
+                               
                                 }
                                 // Смещение: свёрнутый — «каскад» от top-left,
                                 // expanded — все ячейки каскадом d*30dp вправо-вниз
 								// Свёрнутый стек: d=0 заполняет ячейку, d=1,2 выступают справа-снизу.
 								// Правая/нижняя граница d=1 = 172.8dp (12.8dp выступает за CELL_SIZE=160)
 								// Правая/нижняя граница d=2 = 184dp (24dp выступает, но ровно до соседней cell+gap)
-								val collapsedOffset: Float = when (d) {
-									0 -> 0f
-									1 -> 48f      // 48 + 124.8 = 172.8
-									2 -> 104f     // 104 + 80 = 184
-									else -> 104f
-								}
-								val dOffsetXDp: Float = if (isExpanded) d * 30f else collapsedOffset
-								val dOffsetYDp: Float = if (isExpanded) d * 30f else collapsedOffset
-                               
+								// Свёрнутый стек — каскад вправо-вверх:
+								//   d=0: (0, 60), size 100 → родитель смещён вниз-влево
+								//   d=1: (30, 30), size 100 → верхняя + правая полосы видны
+								//   d=2: (60, 0), size 100 → верхняя + правая полосы видны
+								// Expanded — каскад вправо, все по 160:
+								//   d=0: (0, 0), d=1: (40, 0), d=2: (80, 0) — налезают на соседей
+								val collapsedCellSize = CELL_SIZE - 2f * 30f   // = 100dp
+								val cellSizeDp: Float = if (isExpanded) CELL_SIZE else collapsedCellSize
+								val dOffsetXDp: Float = if (isExpanded) d * 40f else d * 30f
+								val dOffsetYDp: Float = if (isExpanded) 0f else (2 - d) * 30f
 
                                 CreatedCell(
                                     data = cell, vm = vm,
@@ -241,10 +238,10 @@ fun ArrayBuilderScreen(
                                             Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                                         }
                                     },
-                                    modifier = Modifier
-                                        .offset(x = dOffsetXDp.dp, y = dOffsetYDp.dp)
-                                        .size((CELL_SIZE * sizeScale).dp)
-                                        .zIndex(100f - d.toFloat())
+									modifier = Modifier
+										.offset(x = dOffsetXDp.dp, y = dOffsetYDp.dp)
+										.size(cellSizeDp.dp)
+										.zIndex(100f - d.toFloat())
                                 )
                             }
 
