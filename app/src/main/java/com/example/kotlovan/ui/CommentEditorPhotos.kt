@@ -1,5 +1,7 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.util.Viewport
+import com.example.kotlovan.util.detectViewerGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -164,15 +166,15 @@ internal fun ViewPhotoDialog(
 
             Box(
                 Modifier.fillMaxSize().clipToBounds()
-                    .pointerInput(photo.id, fitW, fitH) {
-                        com.example.kotlovan.util.detectViewerGestures(
-                            getViewport = { com.example.kotlovan.util.Viewport(pScale, pOffset) },
-                            fitW = fitW, fitH = fitH,
-                            containerW = containerW, containerH = containerH,
-                            onTransform = { vp -> pScale = vp.scale; pOffset = vp.offset },
-                            onSwipe = { _, _ -> }
-                        )
-                    }
+					.pointerInput(photo.id, fitW, fitH) {
+						detectViewerGestures(
+							getViewport = { Viewport(pScale, pOffset) },
+							fitW = fitW, fitH = fitH,
+							containerW = containerW, containerH = containerH,
+							onTransform = { vp -> pScale = vp.scale; pOffset = vp.offset },
+							onSwipe = { _, _ -> }
+						)
+					}
             ) {
                 if (photoW > 0 && photoH > 0) {
                     ZoomableRegionImage(
