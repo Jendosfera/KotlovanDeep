@@ -42,7 +42,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var themeProfile by mutableStateOf(themeRepo.load())
         private set
 
-    /** В фоторежиме — тот же main/aux, картинки те же. Комментарии подменяются отдельно. */
     val active: SubArray
         get() = if (useAux) config.aux else config.main
 
@@ -121,8 +120,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun generatePhotoReport(selectedPins: Set<String>, from: Long, to: Long, uri: Uri): Boolean {
-        // Собираем "виртуальный" SubArray: картинки и структура из main+aux,
-        // а комментарии — из photoComments
         val mergedCells = LinkedHashMap<String, CellData>()
         for ((k, cell) in config.main.cells) {
             val photoComms = config.photoComments[k].orEmpty()
@@ -144,7 +141,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ==== Ячейки ====
 
-    /** Возвращает CellData с подменёнными (при photoModeActive) комментариями. */
     fun cell(r: Int, c: Int, d: Int = 0): CellData? {
         val base = active.cell(r, c, d) ?: return null
         return if (photoModeActive) {
@@ -159,8 +155,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun hasCell(r: Int, c: Int): Boolean = active.hasCell(r, c)
 
     fun upsertCell(r: Int, c: Int, data: CellData, d: Int = 0) {
-        // В фоторежиме структура та же, обновляем ячейку в main/aux,
-        // но комментарии сохраняем отдельно (они не часть CellData в photoMode).
         val commentsToRestore = if (photoModeActive) data.comments else emptyList()
         val cleanData = if (photoModeActive) data.copy(comments = emptyList()) else data
         config = when {
@@ -180,14 +174,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeCell(r: Int, c: Int, d: Int = 0) {
         val key = active.key(r, c, d)
-        config = when {
-            useAux -> config.copy(aux = config.aux.copy(cells = config.aux.cells - key))
-            else -> config.copy(main = config.main.copy(cells = config.main.cells - key))
-        }
-        config = config.copy(photoComments = config.photoComments - key)
+        val map = active.cells.toMutableMap()
+        val pc = config.photoComments.toMutableMap()
+        map.remove(key); pc.remove(key)
         // Сдвиг глубже
-        val sub = active
-        val map = sub.cells.toMutableMap()
         val deeper = map.keys.filter {
             val p = it.split(",")
             p.size == 3 && p[0].toIntOrNull() == r && p[1].toIntOrNull() == c &&
@@ -196,34 +186,118 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         for (k in deeper) {
             val p = k.split(",")
             val dd = p[2].toIntOrNull() ?: 0
-            val v = map[k] ?: continue
-            map.remove(k)
+            val v = map.remove(k) ?: continue
             map["${r},${c},${dd - 1}"] = v
+            pc.remove(k)?.let { pc["${r},${c},${dd - 1}"] = it }
         }
         config = when {
-            useAux -> config.copy(aux = config.aux.copy(cells = map))
-            else -> config.copy(main = config.main.copy(cells = map))
+            useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
+            else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
         }
         hasUnsavedChanges = true
     }
 
+    /** Обмен местами двух цепочек (включая хвосты). Используется в "перестановке". */
     fun swapCells(r1: Int, c1: Int, d1: Int, r2: Int, c2: Int, d2: Int) {
-        val a = active.cell(r1, c1, d1); val b = active.cell(r2, c2, d2)
-        val k1 = active.key(r1, c1, d1); val k2 = active.key(r2, c2, d2)
         val map = active.cells.toMutableMap()
-        if (b != null) map[k1] = b else map.remove(k1)
-        if (a != null) map[k2] = a else map.remove(k2)
-        config = when {
-            useAux -> config.copy(aux = config.aux.copy(cells = map))
-            else -> config.copy(main = config.main.copy(cells = map))
-        }
-        // Перекидываем и комментарии фоторежима
         val pc = config.photoComments.toMutableMap()
-        val pa = pc[k1]; val pb = pc[k2]
-        if (pb != null) pc[k1] = pb else pc.remove(k1)
-        if (pa != null) pc[k2] = pa else pc.remove(k2)
-        config = config.copy(photoComments = pc)
+
+        val tail1 = mutableListOf<Pair<CellData, List<CommentPin>?>>()
+        var d = d1
+        while (true) {
+            val key = active.key(r1, c1, d)
+            val v = map.remove(key) ?: break
+            tail1 += v to pc.remove(key)
+            d++
+        }
+        val tail2 = mutableListOf<Pair<CellData, List<CommentPin>?>>()
+        d = d2
+        while (true) {
+            val key = active.key(r2, c2, d)
+            val v = map.remove(key) ?: break
+            tail2 += v to pc.remove(key)
+            d++
+        }
+        for ((i, pair) in tail2.withIndex()) {
+            val key = active.key(r1, c1, d1 + i)
+            map[key] = pair.first
+            pair.second?.let { pc[key] = it }
+        }
+        for ((i, pair) in tail1.withIndex()) {
+            val key = active.key(r2, c2, d2 + i)
+            map[key] = pair.first
+            pair.second?.let { pc[key] = it }
+        }
+        config = when {
+            useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
+            else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
+        }
         hasUnsavedChanges = true
+    }
+
+    /**
+     * Переносит цепочку (sr,sc,sd)+(sd+1)+... на (tr,tc).
+     * - пусто: цепочка выравнивается на d=0 (sd → 0)
+     * - непусто: цепочка встаёт после последней существующей (newBase = depthAt(tr,tc)+1)
+     */
+    fun moveTail(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
+        // Ничего не двигаем, если это точно то же место и тот же стартовый d
+        if (sr == tr && sc == tc) return
+
+        val map = active.cells.toMutableMap()
+        val pc = config.photoComments.toMutableMap()
+
+        // Собираем цепочку
+        val chain = mutableListOf<Pair<CellData, List<CommentPin>?>>()
+        var d = sd
+        while (true) {
+            val key = active.key(sr, sc, d)
+            val v = map.remove(key) ?: break
+            chain += v to pc.remove(key)
+            d++
+        }
+        if (chain.isEmpty()) {
+            // нечего переносить — откатим
+            config = when {
+                useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
+                else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
+            }
+            return
+        }
+
+        // Считаем base: если target пуст после нашего remove (он мог быть тем же tr,sc,sd) — 
+        // проверяем остаток по map
+        var targetMax = -1
+        var k = 0
+        while (map.containsKey(active.key(tr, tc, k))) {
+            targetMax = k
+            k++
+        }
+        val newBase = targetMax + 1
+
+        for ((i, pair) in chain.withIndex()) {
+            val key = active.key(tr, tc, newBase + i)
+            map[key] = pair.first
+            pair.second?.let { pc[key] = it }
+        }
+
+        config = when {
+            useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
+            else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
+        }
+        hasUnsavedChanges = true
+        autosave()
+    }
+
+    /**
+     * Вкладывает цепочку (sr,sc,sd)+... под (tr,tc). Target обязательно должен существовать.
+     * По сути — moveTail с проверкой.
+     */
+    fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
+        if (sr == tr && sc == tc) return
+        if (active.cell(sr, sc, sd) == null) return
+        if (active.depthAt(tr, tc) < 0) return
+        moveTail(sr, sc, sd, tr, tc)
     }
 
     fun setGlobalViewport(scale: Float, vOx: Float, vOy: Float, r: Int, c: Int, d: Int) {
@@ -241,7 +315,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateCell(r: Int, c: Int, d: Int = 0, transform: (CellData) -> CellData) {
         val cur = active.cell(r, c, d) ?: return
         val newCell = transform(cur)
-        // Если фоторежим — не трогаем комментарии ячейки
         val toStore = if (photoModeActive) newCell.copy(comments = cur.comments) else newCell
         config = when {
             useAux -> config.copy(aux = config.aux.copy(
@@ -304,74 +377,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    // ==== Вложенность ====
-
-    /** Переносит (sr,sc,sd) на depth+1 под target (tr,tc). Место освобождается. */
-    fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
-        if (sr == tr && sc == tc) return
-        val src = active.cell(sr, sc, sd) ?: return
-        val targetDepth = active.depthAt(tr, tc)
-        if (targetDepth < 0) return
-        val newDepth = targetDepth + 1
-        val srcKey = active.key(sr, sc, sd)
-        val map = active.cells.toMutableMap()
-        map.remove(srcKey)   // ЯВНО удаляем исходную ячейку
-        // Сдвигаем всё, что было глубже newDepth в target
-        val toShift = map.keys.filter {
-            val p = it.split(",")
-            p.size == 3 && p[0].toIntOrNull() == tr && p[1].toIntOrNull() == tc &&
-                    (p[2].toIntOrNull() ?: 0) >= newDepth
-        }.sortedByDescending { it.split(",")[2].toIntOrNull() ?: 0 }
-        for (k in toShift) {
-            val p = k.split(",")
-            val dd = p[2].toIntOrNull() ?: 0
-            val v = map[k] ?: continue
-            map.remove(k)
-            map["${tr},${tc},${dd + 1}"] = v
-        }
-        map[active.key(tr, tc, newDepth)] = src
-        // Переносим фото-комментарии исходной ячейки под новый ключ
-        val pc = config.photoComments.toMutableMap()
-        val srcPhoto = pc.remove(srcKey).orEmpty()
-        if (srcPhoto.isNotEmpty()) {
-            pc[active.key(tr, tc, newDepth)] = srcPhoto
-        }
-        // lastRow/lastCol — на target, чтобы после переноса не «висеть» на пустой
-        config = when {
-            useAux -> config.copy(
-                aux = config.aux.copy(cells = map, lastRow = tr, lastCol = tc, lastDepth = 0),
-                photoComments = pc
-            )
-            else -> config.copy(
-                main = config.main.copy(cells = map, lastRow = tr, lastCol = tc, lastDepth = 0),
-                photoComments = pc
-            )
-        }
-        hasUnsavedChanges = true
-        autosave()
-    }
-
+    /** Отделить — оставлено как алиас moveTail для совместимости. */
     fun unnest(sr: Int, sc: Int, sd: Int) {
         if (sd <= 0) return
-        val parentDepth = sd - 1
-        val child = active.cell(sr, sc, sd) ?: return
-        val parent = active.cell(sr, sc, parentDepth) ?: return
-        val k1 = active.key(sr, sc, sd)
-        val k2 = active.key(sr, sc, parentDepth)
-        val map = active.cells.toMutableMap()
-        map[k1] = parent
-        map[k2] = child
-        // Комментарии тоже меняем местами
-        val pc = config.photoComments.toMutableMap()
-        val pa = pc[k1]; val pb = pc[k2]
-        if (pb != null) pc[k1] = pb else pc.remove(k1)
-        if (pa != null) pc[k2] = pa else pc.remove(k2)
-        config = when {
-            useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
-            else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
-        }
-        hasUnsavedChanges = true
-        autosave()
+        moveTail(sr, sc, sd, sr, sc)   // пустое место не имеет смысла, no-op
     }
 
     private fun migrateSub(sub: SubArray): SubArray {
@@ -398,9 +407,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 } else cell
             })
         }
-        return src.copy(
-            main = fixSub(src.main),
-            aux = fixSub(src.aux)
-        )
+        return src.copy(main = fixSub(src.main), aux = fixSub(src.aux))
     }
 }

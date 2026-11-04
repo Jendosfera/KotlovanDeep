@@ -43,15 +43,17 @@ fun RootNav() {
             composable("settings") { SettingsScreen(nav, vm) }
 
             composable(
-                route = "builder?aux={aux}&selectForNested={selectForNested}",
+                route = "builder?aux={aux}&selectForNested={selectForNested}&selectForUnnest={selectForUnnest}",
                 arguments = listOf(
                     navArgument("aux") { type = NavType.BoolType; defaultValue = false },
-                    navArgument("selectForNested") { type = NavType.StringType; defaultValue = "" }
+                    navArgument("selectForNested") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("selectForUnnest") { type = NavType.StringType; defaultValue = "" }
                 )
             ) { back ->
                 val aux = back.arguments?.getBoolean("aux") ?: false
                 val selectForNested = back.arguments?.getString("selectForNested") ?: ""
-                ArrayBuilderScreen(nav, vm, aux, selectForNested)
+                val selectForUnnest = back.arguments?.getString("selectForUnnest") ?: ""
+                ArrayBuilderScreen(nav, vm, aux, selectForNested, selectForUnnest)
             }
 
             composable(

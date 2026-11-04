@@ -86,7 +86,6 @@ fun CellCardScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        // Верхняя панель
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) {
                 Icon(Icons.Default.ArrowBack, "Назад")
@@ -105,7 +104,7 @@ fun CellCardScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // === Кнопка "Вложить" — ВСЕГДА для d=0, вверху карточки ===
+        // «Вложить» — всегда для d=0
         if (depth == 0) {
             Button(
                 onClick = {
@@ -128,7 +127,7 @@ fun CellCardScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        // === Маленькие кнопки уровней d=1..maxDepth ===
+        // Маленькие кнопки уровней
         if (depth == 0 && maxDepth > 0) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -168,7 +167,7 @@ fun CellCardScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        // === Контейнер названия — жёлтый + синяя кайма ===
+        // Контейнер названия
         Box(
             Modifier.fillMaxWidth()
                 .background(Yellow, RoundedCornerShape(8.dp))
@@ -181,7 +180,7 @@ fun CellCardScreen(
             )
         }
 
-        // === Переход к главной + отделить (для d>0) ===
+        // d>0: к главной + Отделить (через builder)
         if (hasParent) {
             Spacer(Modifier.height(8.dp))
             Row(
@@ -200,9 +199,8 @@ fun CellCardScreen(
                 ) { Text("К главной", maxLines = 1) }
                 Button(
                     onClick = {
-                        vm.unnest(row, col, depth)
-                        vm.autosave()
-                        nav.popBackStack()
+                        // Режим выбора куда отделить
+                        nav.navigate("builder?aux=${vm.useAux}&selectForUnnest=$row,$col,$depth")
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFFFCDD2), contentColor = Color.Black
@@ -215,7 +213,7 @@ fun CellCardScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // === Контейнер изображения ===
+        // Изображение
         Box(
             Modifier
                 .fillMaxWidth()
@@ -283,7 +281,6 @@ fun CellCardScreen(
         }
     }
 
-    // === Диалог названия кнопки уровня ===
     labelLevel?.let { lvl ->
         val currentLbl = rootCell?.nestedLevelLabels?.get(lvl).orEmpty()
         var text by remember(lvl, currentLbl) { mutableStateOf(currentLbl) }

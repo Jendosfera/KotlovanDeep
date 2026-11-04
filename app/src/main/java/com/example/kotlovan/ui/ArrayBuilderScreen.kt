@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +19,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,13 +52,19 @@ import com.example.kotlovan.vm.AppViewModel
 @Composable
 fun ArrayBuilderScreen(
     nav: NavHostController, vm: AppViewModel,
-    aux: Boolean, selectForNested: String = ""
+    aux: Boolean, selectForNested: String = "", selectForUnnest: String = ""
 ) {
     val nestedParts = selectForNested.split(",")
     val selR = nestedParts.getOrNull(0)?.toIntOrNull() ?: -1
     val selC = nestedParts.getOrNull(1)?.toIntOrNull() ?: -1
     val selD = nestedParts.getOrNull(2)?.toIntOrNull() ?: 0
     val isSelectMode = selR >= 0 && selC >= 0
+
+    val unnestParts = selectForUnnest.split(",")
+    val unR = unnestParts.getOrNull(0)?.toIntOrNull() ?: -1
+    val unC = unnestParts.getOrNull(1)?.toIntOrNull() ?: -1
+    val unD = unnestParts.getOrNull(2)?.toIntOrNull() ?: 0
+    val isUnnestMode = unR >= 0 && unC >= 0
 
     val ctx = LocalContext.current
     val density = LocalDensity.current
@@ -163,6 +167,7 @@ fun ArrayBuilderScreen(
                     ) {
                         if (hasAny) {
                             val sorted = stack.sortedBy { it.first }
+                            val hasNested = stack.size > 1
 
                             for ((d, cell) in sorted) {
                                 if (!isExpanded && d > 2) continue
@@ -175,9 +180,22 @@ fun ArrayBuilderScreen(
                                                 selectedForSwap!!.third == d)
                                 val isSource = isSelectMode && r == selR && c == selC && d == selD
 
-                                val cellSizeDp: Float = if (isExpanded) CELL_SIZE else CELL_SIZE - 2f * 30f
-                                val dOffsetXDp: Float = if (isExpanded) d * 40f else d * 30f
-                                val dOffsetYDp: Float = if (isExpanded) 0f else (2 - d) * 30f
+                                // Размеры — только если есть вложения
+                                val cellSizeDp: Float = when {
+                                    isExpanded -> CELL_SIZE
+                                    hasNested -> CELL_SIZE - 2f * 30f
+                                    else -> CELL_SIZE
+                                }
+                                val dOffsetXDp: Float = when {
+                                    isExpanded -> d * 40f
+                                    hasNested -> d * 30f
+                                    else -> 0f
+                                }
+                                val dOffsetYDp: Float = when {
+                                    isExpanded -> 0f
+                                    hasNested -> (2 - d) * 30f
+                                    else -> 0f
+                                }
 
                                 CreatedCell(
                                     data = cell, vm = vm,
@@ -187,34 +205,41 @@ fun ArrayBuilderScreen(
                                     isSource = isSource,
                                     depth = d,
                                     onClick = {
-                                        if (isSelectMode) {
+                                        if (isUnnestMode) {
+                                            vm.moveTail(unR, unC, unD, r, c)
+                                            nav.popBackStack()
+                                        } else if (isSelectMode) {
                                             if (!(r == selR && c == selC && d == selD)) {
                                                 vm.makeNested(selR, selC, selD, r, c)
                                                 nav.popBackStack()
                                             }
                                         } else if (longPressMode) {
-                                            if (selectedForSwap == null)
+                                            val s = selectedForSwap
+                                            if (s == null) {
                                                 selectedForSwap = Triple(r, c, d)
-                                            else {
-                                                val s = selectedForSwap!!
-                                                vm.swapCells(s.first, s.second, s.third, r, c, d)
-                                                selectedForSwap = null; longPressMode = false
+                                            } else {
+                                                if (s.first == r && s.second == c && s.third == d) {
+                                                    selectedForSwap = null
+                                                } else {
+                                                    vm.moveTail(s.first, s.second, s.third, r, c)
+                                                    selectedForSwap = null; longPressMode = false
+                                                }
                                             }
                                         } else {
                                             localCurrent = Triple(r, c, d)
                                         }
                                     },
                                     onDoubleTap = {
-                                        if (!isSelectMode && !longPressMode) {
+                                        if (!isSelectMode && !isUnnestMode && !longPressMode) {
                                             vm.updateLastCell(r, c, d)
                                             nav.navigate("card/$r/$c?depth=$d")
                                         }
                                     },
                                     onLongPress = {
-                                        if (!isSelectMode) {
+                                        if (!isSelectMode && !isUnnestMode) {
                                             longPressMode = true
                                             selectedForSwap = Triple(r, c, d)
-                                            Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, "Выберите ячейку для переноса", Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     modifier = Modifier
@@ -249,10 +274,13 @@ fun ArrayBuilderScreen(
                         } else if (isPlus || isEmptyStart) {
                             PlusButton(
                                 onClick = {
-                                    if (isSelectMode) { /* нельзя */ }
+                                    if (isUnnestMode) {
+                                        vm.moveTail(unR, unC, unD, r, c)
+                                        nav.popBackStack()
+                                    } else if (isSelectMode) { /* нельзя */ }
                                     else if (longPressMode && selectedForSwap != null) {
                                         val s = selectedForSwap!!
-                                        vm.swapCells(s.first, s.second, s.third, r, c, 0)
+                                        vm.moveTail(s.first, s.second, s.third, r, c)
                                         selectedForSwap = null; longPressMode = false
                                     } else if (!longPressMode) {
                                         vm.updateLastCell(r, c, 0)
@@ -266,7 +294,7 @@ fun ArrayBuilderScreen(
             }
         }
 
-        if (!isSelectMode) {
+        if (!isSelectMode && !isUnnestMode) {
             ArrayBuilderTopBar(
                 aux = aux,
                 onBack = { vm.autosave(); nav.popBackStack() },
@@ -289,6 +317,15 @@ fun ArrayBuilderScreen(
                     ),
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) { Text("Отменить вложение") }
+            } else if (isUnnestMode) {
+                Button(
+                    onClick = { nav.popBackStack() },
+                    border = BorderStroke(7.dp, Color.Black),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFCDD2), contentColor = Color.Black
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) { Text("Отменить отделение") }
             } else {
                 if (longPressMode) {
                     Button(
@@ -301,6 +338,7 @@ fun ArrayBuilderScreen(
                     Button(
                         onClick = {
                             if (vm.active.cells.isNotEmpty()) {
+                                localCurrent?.let { vm.updateLastCell(it.first, it.second, it.third) }
                                 vm.autosave(); nav.navigate("viewer")
                             }
                         },

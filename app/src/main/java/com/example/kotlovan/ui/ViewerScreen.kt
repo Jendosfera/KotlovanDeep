@@ -84,6 +84,26 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
+	
+	LaunchedEffect(Unit) {
+		if (vm.active.cell(row, col, depth) == null) {
+			val firstKey = vm.active.cells.keys.minByOrNull { k ->
+				val p = k.split(",")
+				val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
+				val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
+				r * 10000 + cc
+			}
+			if (firstKey != null) {
+				val p = firstKey.split(",")
+				row = p.getOrNull(0)?.toIntOrNull() ?: 0
+				col = p.getOrNull(1)?.toIntOrNull() ?: 0
+				depth = 0
+			} else {
+				row = 0; col = 0; depth = 0
+			}
+			savedRow = -1; savedCol = -1
+		}
+	}
 
     val inLinkMode = vm.linkReturn != null
 
@@ -433,23 +453,29 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 },
 				onToggleArray = {
 					persistViewport()
+					val oldRow = row
+					val oldCol = col
 					vm.useAux = !vm.useAux
 					val t = vm.active
-					var targetRow = t.lastRow
-					var targetCol = t.lastCol
-					// Если lastRow/lastCol не существует — найти первую валидную
-					if (t.cell(targetRow, targetCol, 0) == null) {
-						val firstKey = t.cells.keys.minByOrNull { it }
-						if (firstKey != null) {
-							val parts = firstKey.split(",")
-							targetRow = parts.getOrNull(0)?.toIntOrNull() ?: 0
-							targetCol = parts.getOrNull(1)?.toIntOrNull() ?: 0
-						} else {
-							targetRow = 0; targetCol = 0
+					val target: Pair<Int, Int> = when {
+						t.cell(oldRow, oldCol, 0) != null -> oldRow to oldCol
+						t.cell(t.lastRow, t.lastCol, 0) != null -> t.lastRow to t.lastCol
+						t.cells.isNotEmpty() -> {
+							val firstKey = t.cells.keys.minByOrNull { k ->
+								val p = k.split(",")
+								val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
+								val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
+								r * 10000 + cc
+							}
+							if (firstKey != null) {
+								val p = firstKey.split(",")
+								(p.getOrNull(0)?.toIntOrNull() ?: 0) to (p.getOrNull(1)?.toIntOrNull() ?: 0)
+							} else 0 to 0
 						}
+						else -> 0 to 0
 					}
 					savedRow = -1; savedCol = -1
-					row = targetRow; col = targetCol; depth = 0
+					row = target.first; col = target.second; depth = 0
 					pendingJump = null
 				},
                 onMenuOpenToggle = { menuOpen = !menuOpen },
