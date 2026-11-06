@@ -88,7 +88,7 @@ class ArrayRepository(private val context: Context) {
         )
     }
 
-    // ─────────── Дедупликация ───────────
+    // ─────────── Хэш ───────────
 
     private fun fileHash(file: File): String {
         return try {
@@ -106,43 +106,33 @@ class ArrayRepository(private val context: Context) {
         }
     }
 
+    // ─────────── Дедупликация ───────────
+
     /**
-     * Строит карту (oldName → canonicalName) для всех картинок из sub.cells,
-     * учитывая дубликаты по содержимому (MD5).
+     * Проходит по ВСЕМ файлам в imagesDir, находит дубликаты по MD5,
+     * удаляет дубликаты, возвращает карту (oldName → canonicalName).
      */
-    private fun buildDedupMap(subs: List<SubArray>): Map<String, String> {
+    private fun deduplicateFiles(): Map<String, String> {
         val hashToCanonical = LinkedHashMap<String, String>()
         val oldToNew = LinkedHashMap<String, String>()
 
-        fun processName(name: String) {
-            if (name in oldToNew) return
-            val f = File(imagesDir, name)
-            if (!f.exists()) {
-                oldToNew[name] = name
-                return
-            }
+        val files = imagesDir.listFiles()?.filter { it.isFile } ?: return oldToNew
+        for (f in files) {
             val h = fileHash(f)
             val canonical = hashToCanonical[h]
             if (canonical != null) {
-                oldToNew[name] = canonical
+                // Дубликат — удаляем файл, ссылки перенаправляем
+                oldToNew[f.name] = canonical
+                try { f.delete() } catch (_: Throwable) {}
             } else {
-                hashToCanonical[h] = name
-                oldToNew[name] = name
-            }
-        }
-
-        for (sub in subs) {
-            for ((_, cell) in sub.cells) {
-                cell.imageFile?.let { processName(it) }
-                for (pin in cell.comments) {
-                    for (ph in pin.photos) processName(ph.file)
-                }
+                hashToCanonical[h] = f.name
+                oldToNew[f.name] = f.name
             }
         }
         return oldToNew
     }
 
-    /** Применяет карту дедупликации к SubArray (возвращает копию с заменёнными именами). */
+    /** Применяет карту дедупликации к SubArray (возвращает копию). */
     private fun applyDedup(sub: SubArray, oldToNew: Map<String, String>): SubArray {
         val newCells = LinkedHashMap<String, CellData>()
         for ((k, cell) in sub.cells) {
@@ -157,12 +147,38 @@ class ArrayRepository(private val context: Context) {
         return sub.copy(cells = newCells)
     }
 
+    /**
+     * Оптимизирует ВСЁ хранилище: удаляет физические дубликаты файлов
+     * и возвращает config с обновлёнными путями.
+     *
+     * Вызывается из `saveAsZip` перед упаковкой.
+     */
+    fun optimizeStorage(config: ArrayConfig): ArrayConfig {
+        val oldToNew = deduplicateFiles()
+        if (oldToNew.isEmpty()) return config
+
+        val newMain = applyDedup(config.main, oldToNew)
+        val newAux = applyDedup(config.aux, oldToNew)
+        val newPhotoComments = config.photoComments.mapValues { (_, pins) ->
+            pins.map { pin ->
+                pin.copy(photos = pin.photos.map { ph ->
+                    ph.copy(file = oldToNew[ph.file] ?: ph.file)
+                })
+            }
+        }
+        return config.copy(
+            main = newMain,
+            aux = newAux,
+            photoComments = newPhotoComments
+        )
+    }
+
     // ─────────── Сохранение/загрузка SubArray ───────────
 
     fun saveSubArrayAsZip(sub: SubArray, uri: Uri): Boolean {
         return try {
-            val dedup = buildDedupMap(listOf(sub))
-            val deduped = applyDedup(sub, dedup)
+            val oldToNew = deduplicateFiles()
+            val deduped = applyDedup(sub, oldToNew)
 
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 ZipOutputStream(out).use { zip ->
@@ -218,33 +234,27 @@ class ArrayRepository(private val context: Context) {
 
     // ─────────── Основное сохранение/загрузка ───────────
 
-    fun saveAsZip(config: ArrayConfig, uri: Uri): Boolean {
+    /**
+     * Сохраняет config в ZIP.
+     * Перед упаковкой:
+     *  1. deduplicateFiles() — удаляет физические дубликаты в imagesDir,
+     *     возвращает карту (oldName → canonicalName).
+     *  2. Применяет эту карту ко всем SubArray и photoComments.
+     *
+     * @return finalConfig — config с обновлёнными (каноническими) именами.
+     *   null — если запись не удалась.
+     */
+    fun saveAsZip(config: ArrayConfig, uri: Uri): ArrayConfig? {
         return try {
-            // Собираем все SubArray с комментариями (обычные + фото)
-            // Для дедупликации надо пройти по всем cell.comments + photoComments
-            val subsForDedup = mutableListOf<SubArray>()
-            fun materialize(sub: SubArray): SubArray {
-                val cellsWithPhoto = LinkedHashMap<String, CellData>()
-                for ((k, cell) in sub.cells) {
-                    val photoComms = config.photoComments[k].orEmpty()
-                    cellsWithPhoto[k] = if (photoComms.isNotEmpty())
-                        cell.copy(comments = cell.comments + photoComms)
-                    else cell
-                }
-                return sub.copy(cells = cellsWithPhoto)
-            }
-            subsForDedup += materialize(config.main)
-            subsForDedup += materialize(config.aux)
+            // 1. Дедуплицируем ВСЁ хранилище
+            val oldToNew = deduplicateFiles()
 
-            val dedup = buildDedupMap(subsForDedup)
-
-            val newMain = applyDedup(config.main, dedup)
-            val newAux = applyDedup(config.aux, dedup)
-            // photoComments: меняем только имена photo-файлов
+            val newMain = applyDedup(config.main, oldToNew)
+            val newAux = applyDedup(config.aux, oldToNew)
             val newPhotoComments = config.photoComments.mapValues { (_, pins) ->
                 pins.map { pin ->
                     pin.copy(photos = pin.photos.map { ph ->
-                        ph.copy(file = dedup[ph.file] ?: ph.file)
+                        ph.copy(file = oldToNew[ph.file] ?: ph.file)
                     })
                 }
             }
@@ -255,6 +265,7 @@ class ArrayRepository(private val context: Context) {
                 photoComments = newPhotoComments
             )
 
+            // 2. Пишем ZIP
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 ZipOutputStream(out).use { zip ->
                     zip.setLevel(0)
@@ -284,8 +295,11 @@ class ArrayRepository(private val context: Context) {
                     }
                 }
             }
-            true
-        } catch (e: Exception) { Log.e("Kotlovan", "saveAsZip", e); false }
+            finalConfig
+        } catch (e: Exception) {
+            Log.e("Kotlovan", "saveAsZip", e)
+            null
+        }
     }
 
     fun loadFromZip(uri: Uri): ArrayConfig? {
