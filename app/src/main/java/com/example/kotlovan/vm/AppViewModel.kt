@@ -101,15 +101,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun save(uri: Uri): Boolean {
-        val ok = repo.saveAsZip(config, uri)
-        if (ok) hasUnsavedChanges = false
-        return ok
+        val finalConfig = repo.saveAsZip(config, uri) ?: return false
+        config = finalConfig
+        hasUnsavedChanges = false
+        return true
     }
 
     fun savePhotoArchive(uri: Uri): Boolean {
-        val ok = repo.saveAsZip(config, uri)
-        if (ok) hasUnsavedChanges = false
-        return ok
+        val finalConfig = repo.saveAsZip(config, uri) ?: return false
+        config = finalConfig
+        hasUnsavedChanges = false
+        return true
     }
 
     fun loadPhotoArchive(uri: Uri): Boolean {
@@ -119,12 +121,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /**
-     * Фотоотчёт: собирает «виртуальный» SubArray из main + aux,
-     * но оставляет в каждой ячейке ТОЛЬКО фото-комментарии, попадающие
-     * под фильтр (selectedPins, from..to). Ячейки без подходящих пинов
-     * в merged не попадают → пустых папок в ZIP не будет.
-     */
     fun generatePhotoReport(selectedPins: Set<String>, from: Long, to: Long, uri: Uri): Boolean {
         val mergedCells = LinkedHashMap<String, CellData>()
         for ((k, cell) in config.main.cells) {
@@ -146,8 +142,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun autosave() { repo.autosave(config); hasUnsavedChanges = false }
-
-    // ==== Ячейки ====
 
     fun cell(r: Int, c: Int, d: Int = 0): CellData? {
         val base = active.cell(r, c, d) ?: return null
