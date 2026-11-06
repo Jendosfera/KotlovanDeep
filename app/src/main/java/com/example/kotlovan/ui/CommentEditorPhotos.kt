@@ -1,15 +1,12 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.util.Viewport
-import com.example.kotlovan.util.detectViewerGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,16 +16,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -46,9 +46,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.kotlovan.data.CommentIconType
 import com.example.kotlovan.data.CommentPhoto
+import com.example.kotlovan.util.Viewport
+import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
 import kotlin.math.min
 
@@ -100,7 +103,7 @@ internal fun CommentPhotoThumb(
         if (photo.title.isNotBlank()) {
             Text(
                 photo.title,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 modifier = Modifier.width(80.dp).padding(top = 2.dp)
             )
@@ -117,7 +120,7 @@ internal fun PhotosRow(
 ) {
     if (photos.isEmpty()) return
     Spacer(Modifier.height(12.dp))
-    Text("Фотографии:", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+    Text("Фотографии:", style = MaterialTheme.typography.titleSmall)
     Spacer(Modifier.height(6.dp))
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
@@ -133,18 +136,20 @@ internal fun PhotosRow(
     }
 }
 
+/**
+ * Просмотр фото. usePlatformDefaultWidth = false → диалог занимает
+ * всё доступное окно, при повороте пересчитывает BoxWithConstraints.
+ */
 @Composable
 internal fun ViewPhotoDialog(
     photo: CommentPhoto,
     vm: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    var photoW by remember(photo.id) { mutableStateOf(0) }
-    var photoH by remember(photo.id) { mutableStateOf(0) }
-    var pScale by remember(photo.id) { mutableFloatStateOf(1f) }
-    var pOffset by remember(photo.id) { mutableStateOf(Offset.Zero) }
+    var photoW by remember(photo.id) { mutableIntStateOf(0) }
+    var photoH by remember(photo.id) { mutableIntStateOf(0) }
 
-    androidx.compose.runtime.LaunchedEffect(photo.id) {
+    LaunchedEffect(photo.id) {
         val f = vm.repo.photoFile(photo.file)
         val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
         android.graphics.BitmapFactory.decodeFile(f.absolutePath, opts)
@@ -152,10 +157,17 @@ internal fun ViewPhotoDialog(
         photoH = opts.outHeight
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.foundation.layout.BoxWithConstraints(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f))
-        ) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        // Ключ: BoxWithConstraints внутри Dialog получает новые constraints при
+        // повороте — пересчёт автоматический. Явно сохраняем scale/offset в
+        // remember(photo.id) — они не сбрасываются.
+        var pScale by remember(photo.id) { mutableFloatStateOf(1f) }
+        var pOffset by remember(photo.id) { mutableStateOf(Offset.Zero) }
+
+        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f))) {
             val containerW = constraints.maxWidth.toFloat()
             val containerH = constraints.maxHeight.toFloat()
             val density = LocalDensity.current
@@ -164,17 +176,29 @@ internal fun ViewPhotoDialog(
             val fitW = if (photoW > 0) photoW * fitScale else containerW
             val fitH = if (photoH > 0) photoH * fitScale else containerH
 
+            // При смене containerW/H пере-сбрасываем viewport (иначе фото «уезжает»
+            // в угол при повороте, т.к. offset был в старой системе координат).
+            LaunchedEffect(containerW, containerH) {
+                pScale = 1f
+                pOffset = Offset(
+                    (containerW - fitW) / 2f,
+                    (containerH - fitH) / 2f
+                )
+            }
+
             Box(
-                Modifier.fillMaxSize().clipToBounds()
-					.pointerInput(photo.id, fitW, fitH) {
-						detectViewerGestures(
-							getViewport = { Viewport(pScale, pOffset) },
-							fitW = fitW, fitH = fitH,
-							containerW = containerW, containerH = containerH,
-							onTransform = { vp -> pScale = vp.scale; pOffset = vp.offset },
-							onSwipe = { _, _ -> }
-						)
-					}
+                Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+                    .pointerInput(photo.id, fitW, fitH, containerW, containerH) {
+                        detectViewerGestures(
+                            getViewport = { Viewport(pScale, pOffset) },
+                            fitW = fitW, fitH = fitH,
+                            containerW = containerW, containerH = containerH,
+                            onTransform = { vp -> pScale = vp.scale; pOffset = vp.offset },
+                            onSwipe = { _, _ -> }
+                        )
+                    }
             ) {
                 if (photoW > 0 && photoH > 0) {
                     ZoomableRegionImage(
@@ -189,7 +213,10 @@ internal fun ViewPhotoDialog(
             }
 
             Box(
-                Modifier.align(Alignment.TopEnd).padding(16.dp).size(44.dp)
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .size(44.dp)
                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
                     .clickable(onClick = onDismiss),
                 contentAlignment = Alignment.Center
@@ -207,8 +234,8 @@ internal fun EditPhotoDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var t by remember(photo.id) { mutableStateOf(photo.title) }
-    var c by remember(photo.id) { mutableStateOf(photo.comment) }
+    var t by remember(photo.id, photo.title) { mutableStateOf(photo.title) }
+    var c by remember(photo.id, photo.comment) { mutableStateOf(photo.comment) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Фотография") },
