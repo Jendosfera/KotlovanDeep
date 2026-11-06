@@ -119,14 +119,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /**
+     * Фотоотчёт: собирает «виртуальный» SubArray из main + aux,
+     * но оставляет в каждой ячейке ТОЛЬКО фото-комментарии, попадающие
+     * под фильтр (selectedPins, from..to). Ячейки без подходящих пинов
+     * в merged не попадают → пустых папок в ZIP не будет.
+     */
     fun generatePhotoReport(selectedPins: Set<String>, from: Long, to: Long, uri: Uri): Boolean {
         val mergedCells = LinkedHashMap<String, CellData>()
         for ((k, cell) in config.main.cells) {
             val photoComms = config.photoComments[k].orEmpty()
+                .filter { it.id in selectedPins && it.createdAt in from..to }
             if (photoComms.isNotEmpty()) mergedCells[k] = cell.copy(comments = photoComms)
         }
         for ((k, cell) in config.aux.cells) {
             val photoComms = config.photoComments[k].orEmpty()
+                .filter { it.id in selectedPins && it.createdAt in from..to }
             if (photoComms.isNotEmpty()) mergedCells[k] = cell.copy(comments = photoComms)
         }
         val merged = SubArray(
@@ -319,11 +327,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Обновление одного пина в любом хранилище.
-     * Приоритет — по фактическому нахождению: если пин есть в photoComments[key],
-     * обновляем там, иначе — в cell.comments.
-     */
     fun updatePin(r: Int, c: Int, d: Int, pin: CommentPin) {
         val key = active.key(r, c, d)
         val sub = active
@@ -350,7 +353,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             else -> {
-                // Пина нет ни там, ни там — пишем по текущему photoModeActive
                 if (photoModeActive) {
                     val photo = config.photoComments[key].orEmpty() + pin
                     config = config.copy(photoComments = config.photoComments + (key to photo))
@@ -390,10 +392,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    /**
-     * Переносит пин между обычными комментариями и photoComments.
-     * toPhoto = true: normal → photo; false: photo → normal.
-     */
     fun movePinBetweenStores(r: Int, c: Int, d: Int, pinId: String, toPhoto: Boolean) {
         val key = active.key(r, c, d)
         val sub = active
