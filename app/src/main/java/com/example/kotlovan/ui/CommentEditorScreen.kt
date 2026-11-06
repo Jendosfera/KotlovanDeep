@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -83,8 +82,6 @@ fun CommentEditorScreen(
     val ctx = LocalContext.current
     val key = vm.active.key(row, col, depth)
 
-    // Определяем, где хранится комментарий: обычный (в cell.comments)
-    // или фотофиксации (в config.photoComments[key])
     val isPhotoComment = remember(vm.config.photoComments, id) {
         vm.config.photoComments[key]?.any { it.id == id } == true
     }
@@ -102,26 +99,22 @@ fun CommentEditorScreen(
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
 
-    // Автосохранение каждые 400 мс после изменения
-    LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
-        kotlinx.coroutines.delay(400)
-        saveCurrent()
-    }
-
     fun saveCurrent() {
-        val curCell = vm.cell(row, col, depth) ?: return
-        val curPin = curCell.comments.firstOrNull { it.id == id } ?: return
+        val curPin = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id } ?: return
         if (curPin.title == title && curPin.text == text &&
             curPin.shortLabel == shortLabel && curPin.color == color &&
             curPin.iconType == iconType && curPin.photos == photos &&
             curPin.rating == rating) return
-        vm.setComments(row, col, curCell.comments.map {
-            if (it.id == id) it.copy(
-                title = title, text = text, shortLabel = shortLabel,
-                color = color, iconType = iconType, photos = photos, rating = rating
-            ) else it
-        }, depth)
+        vm.updatePin(row, col, depth, curPin.copy(
+            title = title, text = text, shortLabel = shortLabel,
+            color = color, iconType = iconType, photos = photos, rating = rating
+        ))
         vm.autosave()
+    }
+
+    LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
+        kotlinx.coroutines.delay(400)
+        saveCurrent()
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -177,44 +170,29 @@ fun CommentEditorScreen(
     }
 
     fun save() {
-        vm.setComments(row, col, cell.comments.map {
-            if (it.id == id) it.copy(
-                title = title, text = text, shortLabel = shortLabel,
-                color = color, iconType = iconType, photos = photos, rating = rating
-            ) else it
-        }, depth)
+        vm.updatePin(row, col, depth, pin.copy(
+            title = title, text = text, shortLabel = shortLabel,
+            color = color, iconType = iconType, photos = photos, rating = rating
+        ))
         vm.autosave()
         nav.popBackStack()
     }
 
     fun moveToPhoto() {
-        // Перенос в фоторежим: удаляем из cell.comments, добавляем в photoComments[key]
-        val currentPin = pin.copy(
+        vm.updatePin(row, col, depth, pin.copy(
             title = title, text = text, shortLabel = shortLabel,
             color = color, iconType = iconType, photos = photos, rating = rating
-        )
-        vm.setComments(row, col, cell.comments.filterNot { it.id == id }, depth)
-        val currentPhoto = vm.config.photoComments[key].orEmpty()
-        vm.config = vm.config.copy(
-            photoComments = vm.config.photoComments + (key to (currentPhoto + currentPin))
-        )
-        vm.autosave()
+        ))
+        vm.movePinBetweenStores(row, col, depth, id, toPhoto = true)
         nav.popBackStack()
     }
 
     fun moveToNormal() {
-        // Перенос в обычные: удаляем из photoComments[key], добавляем в cell.comments
-        val currentPin = pin.copy(
+        vm.updatePin(row, col, depth, pin.copy(
             title = title, text = text, shortLabel = shortLabel,
             color = color, iconType = iconType, photos = photos, rating = rating
-        )
-        val currentPhoto = vm.config.photoComments[key].orEmpty()
-        vm.config = vm.config.copy(
-            photoComments = vm.config.photoComments +
-                    (key to currentPhoto.filterNot { it.id == id })
-        )
-        vm.setComments(row, col, cell.comments + currentPin, depth)
-        vm.autosave()
+        ))
+        vm.movePinBetweenStores(row, col, depth, id, toPhoto = false)
         nav.popBackStack()
     }
 
@@ -228,18 +206,7 @@ fun CommentEditorScreen(
             initialX = pin.x, initialY = pin.y,
             onCancel = { moving = false },
             onConfirm = { nx, ny ->
-                // Обновляем координаты в том же хранилище, где лежит пин
-                if (isPhotoComment) {
-                    val cur = vm.config.photoComments[key].orEmpty()
-                    vm.config = vm.config.copy(
-                        photoComments = vm.config.photoComments +
-                                (key to cur.map { if (it.id == id) it.copy(x = nx, y = ny) else it })
-                    )
-                } else {
-                    vm.setComments(row, col, cell.comments.map {
-                        if (it.id == id) it.copy(x = nx, y = ny) else it
-                    }, depth)
-                }
+                vm.updatePin(row, col, depth, pin.copy(x = nx, y = ny))
                 vm.autosave()
                 moving = false
             }
@@ -255,7 +222,6 @@ fun CommentEditorScreen(
                 }
                 Text("Комментарий", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                // Кнопка перевода обычный <-> фотофиксация
                 IconButton(onClick = { if (isPhotoComment) moveToNormal() else moveToPhoto() }) {
                     Icon(
                         Icons.Default.SwapHoriz,
@@ -323,7 +289,7 @@ fun CommentEditorScreen(
 
         IconButton(
             onClick = {
-                vm.setComments(row, col, cell.comments.filterNot { it.id == id }, depth)
+                vm.deletePin(row, col, depth, id)
                 vm.autosave(); nav.popBackStack()
             },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
@@ -352,106 +318,4 @@ fun CommentEditorScreen(
                     Text("Цвет:", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (c in PresetColors) {
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(c.toInt()))
-                                    .then(
-                                        if (c == color) Modifier.border(3.dp, Color.Black, CircleShape)
-                                        else Modifier
-                                    )
-                                    .clickable { color = c }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Иконка:", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (t in listOf(
-                            CommentIconType.CIRCLE, CommentIconType.SQUARE,
-                            CommentIconType.TRIANGLE, CommentIconType.DIAMOND
-                        )) {
-                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (t in listOf(
-                            CommentIconType.ROSETTE, CommentIconType.PHONE,
-                            CommentIconType.COMPUTER
-                        )) {
-                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showStyleDialog = false }) { Text("OK") }
-            }
-        )
-    }
-
-    viewPhoto?.let { photo ->
-        ViewPhotoDialog(
-            photo = photo, vm = vm,
-            onDismiss = { viewPhoto = null }
-        )
-    }
-
-    editPhoto?.let { photo ->
-        EditPhotoDialog(
-            photo = photo,
-            onSave = { t, c ->
-                photos = photos.map {
-                    if (it.id == photo.id) it.copy(title = t, comment = c) else it
-                }
-                editPhoto = null
-            },
-            onDelete = {
-                photos = photos.filterNot { it.id == photo.id }
-                editPhoto = null
-            },
-            onDismiss = { editPhoto = null }
-        )
-    }
-}
-
-@Composable
-private fun YellowField(
-    value: String, onValueChange: (String) -> Unit,
-    label: String, modifier: Modifier = Modifier
-) {
-    Box(
-        modifier
-            .background(Yellow, RoundedCornerShape(8.dp))
-            .border(BlueBorder, RoundedCornerShape(8.dp))
-            .padding(4.dp)
-    ) {
-        OutlinedTextField(
-            value = value, onValueChange = onValueChange,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun YellowBigButton(
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
-        border = BorderStroke(7.dp, Blue),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier.height(64.dp)
-    ) {
-        Icon(icon, null, modifier = Modifier.size(32.dp))
-    }
-}
+                       
