@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,6 +23,8 @@ class ArrayRepository(private val context: Context) {
     private val json = Json { prettyPrint = true; ignoreUnknownKeys = true; encodeDefaults = true }
     private val prefs = context.getSharedPreferences("kotlovan_prefs", Context.MODE_PRIVATE)
     private val imagesDir = File(context.filesDir, "cell_images").apply { mkdirs() }
+
+    // ─────────── Изображения ───────────
 
     fun importImage(uri: Uri): String? {
         return try {
@@ -85,19 +88,92 @@ class ArrayRepository(private val context: Context) {
         )
     }
 
+    // ─────────── Дедупликация ───────────
+
+    private fun fileHash(file: File): String {
+        return try {
+            val md = MessageDigest.getInstance("MD5")
+            file.inputStream().use { input ->
+                val buf = ByteArray(8192)
+                var read: Int
+                while (input.read(buf).also { read = it } > 0) {
+                    md.update(buf, 0, read)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Throwable) {
+            "err_${file.name}_${file.length()}"
+        }
+    }
+
+    /**
+     * Строит карту (oldName → canonicalName) для всех картинок из sub.cells,
+     * учитывая дубликаты по содержимому (MD5).
+     */
+    private fun buildDedupMap(subs: List<SubArray>): Map<String, String> {
+        val hashToCanonical = LinkedHashMap<String, String>()
+        val oldToNew = LinkedHashMap<String, String>()
+
+        fun processName(name: String) {
+            if (name in oldToNew) return
+            val f = File(imagesDir, name)
+            if (!f.exists()) {
+                oldToNew[name] = name
+                return
+            }
+            val h = fileHash(f)
+            val canonical = hashToCanonical[h]
+            if (canonical != null) {
+                oldToNew[name] = canonical
+            } else {
+                hashToCanonical[h] = name
+                oldToNew[name] = name
+            }
+        }
+
+        for (sub in subs) {
+            for ((_, cell) in sub.cells) {
+                cell.imageFile?.let { processName(it) }
+                for (pin in cell.comments) {
+                    for (ph in pin.photos) processName(ph.file)
+                }
+            }
+        }
+        return oldToNew
+    }
+
+    /** Применяет карту дедупликации к SubArray (возвращает копию с заменёнными именами). */
+    private fun applyDedup(sub: SubArray, oldToNew: Map<String, String>): SubArray {
+        val newCells = LinkedHashMap<String, CellData>()
+        for ((k, cell) in sub.cells) {
+            val newImage = cell.imageFile?.let { oldToNew[it] ?: it }
+            val newPhotos = cell.comments.map { pin ->
+                pin.copy(photos = pin.photos.map { ph ->
+                    ph.copy(file = oldToNew[ph.file] ?: ph.file)
+                })
+            }
+            newCells[k] = cell.copy(imageFile = newImage, comments = newPhotos)
+        }
+        return sub.copy(cells = newCells)
+    }
+
+    // ─────────── Сохранение/загрузка SubArray ───────────
+
     fun saveSubArrayAsZip(sub: SubArray, uri: Uri): Boolean {
         return try {
+            val dedup = buildDedupMap(listOf(sub))
+            val deduped = applyDedup(sub, dedup)
+
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 ZipOutputStream(out).use { zip ->
                     zip.setLevel(0)
                     zip.putNextEntry(ZipEntry("array.json"))
-                    zip.write(json.encodeToString(SubArray.serializer(), sub).toByteArray())
+                    zip.write(json.encodeToString(SubArray.serializer(), deduped).toByteArray())
                     zip.closeEntry()
 
                     val used = LinkedHashSet<String>()
-                    for ((_, cell) in sub.cells) {
+                    for ((_, cell) in deduped.cells) {
                         cell.imageFile?.let { used += it }
-                        
                         for (pin in cell.comments) for (ph in pin.photos) used += ph.file
                     }
                     for (name in used) {
@@ -140,29 +216,64 @@ class ArrayRepository(private val context: Context) {
         } catch (e: Exception) { Log.e("Kotlovan", "loadSubArrayFromZip", e); null }
     }
 
+    // ─────────── Основное сохранение/загрузка ───────────
+
     fun saveAsZip(config: ArrayConfig, uri: Uri): Boolean {
         return try {
+            // Собираем все SubArray с комментариями (обычные + фото)
+            // Для дедупликации надо пройти по всем cell.comments + photoComments
+            val subsForDedup = mutableListOf<SubArray>()
+            fun materialize(sub: SubArray): SubArray {
+                val cellsWithPhoto = LinkedHashMap<String, CellData>()
+                for ((k, cell) in sub.cells) {
+                    val photoComms = config.photoComments[k].orEmpty()
+                    cellsWithPhoto[k] = if (photoComms.isNotEmpty())
+                        cell.copy(comments = cell.comments + photoComms)
+                    else cell
+                }
+                return sub.copy(cells = cellsWithPhoto)
+            }
+            subsForDedup += materialize(config.main)
+            subsForDedup += materialize(config.aux)
+
+            val dedup = buildDedupMap(subsForDedup)
+
+            val newMain = applyDedup(config.main, dedup)
+            val newAux = applyDedup(config.aux, dedup)
+            // photoComments: меняем только имена photo-файлов
+            val newPhotoComments = config.photoComments.mapValues { (_, pins) ->
+                pins.map { pin ->
+                    pin.copy(photos = pin.photos.map { ph ->
+                        ph.copy(file = dedup[ph.file] ?: ph.file)
+                    })
+                }
+            }
+
+            val finalConfig = config.copy(
+                main = newMain,
+                aux = newAux,
+                photoComments = newPhotoComments
+            )
+
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 ZipOutputStream(out).use { zip ->
                     zip.setLevel(0)
                     zip.putNextEntry(ZipEntry("array.json"))
-                    zip.write(json.encodeToString(ArrayConfig.serializer(), config).toByteArray())
+                    zip.write(json.encodeToString(ArrayConfig.serializer(), finalConfig).toByteArray())
                     zip.closeEntry()
 
                     val used = LinkedHashSet<String>()
-					fun collect(sub: SubArray) {
-						for ((_, cell) in sub.cells) {
-							cell.imageFile?.let { used += it }
-							for (pin in cell.comments) for (ph in pin.photos) used += ph.file
-						}
-					}
-					collect(config.main)
-					collect(config.aux)
-					// фото-комментарии хранят только ссылки на уже собранные файлы,
-					// отдельные картинки для них не нужны
-					for (comments in config.photoComments.values) {
-						for (pin in comments) for (ph in pin.photos) used += ph.file
-					}
+                    fun collect(sub: SubArray) {
+                        for ((_, cell) in sub.cells) {
+                            cell.imageFile?.let { used += it }
+                            for (pin in cell.comments) for (ph in pin.photos) used += ph.file
+                        }
+                    }
+                    collect(finalConfig.main)
+                    collect(finalConfig.aux)
+                    for (pins in finalConfig.photoComments.values) {
+                        for (pin in pins) for (ph in pin.photos) used += ph.file
+                    }
 
                     for (name in used) {
                         val f = File(imagesDir, name)
@@ -211,6 +322,8 @@ class ArrayRepository(private val context: Context) {
             json.decodeFromString(ArrayConfig.serializer(), text)
         } catch (e: Exception) { Log.e("Kotlovan", "loadFromUri", e); null }
     }
+
+    // ─────────── Фотоотчёт ───────────
 
     fun generatePhotoReport(
         archive: SubArray,
@@ -296,6 +409,8 @@ class ArrayRepository(private val context: Context) {
             true
         } catch (e: Exception) { Log.e("Kotlovan", "generatePhotoReport", e); false }
     }
+
+    // ─────────── Автосохранение ───────────
 
     fun autosave(config: ArrayConfig) {
         prefs.edit().putString("autosave", json.encodeToString(ArrayConfig.serializer(), config)).apply()
