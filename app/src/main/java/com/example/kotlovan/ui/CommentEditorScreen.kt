@@ -318,4 +318,103 @@ fun CommentEditorScreen(
                     Text("Цвет:", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                       
+                        for (c in PresetColors) {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(c.toInt()))
+                                    .then(
+                                        if (c == color) Modifier.border(3.dp, Color.Black, CircleShape)
+                                        else Modifier
+                                    )
+                                    .clickable { color = c }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Иконка:", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (t in listOf(
+                            CommentIconType.CIRCLE, CommentIconType.SQUARE,
+                            CommentIconType.TRIANGLE, CommentIconType.DIAMOND
+                        )) {
+                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (t in listOf(
+                            CommentIconType.ROSETTE, CommentIconType.PHONE,
+                            CommentIconType.COMPUTER
+                        )) {
+                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStyleDialog = false }) { Text("OK") }
+            }
+        )
+    }
+
+    viewPhoto?.let { photo ->
+        ViewPhotoDialog(photo = photo, vm = vm, onDismiss = { viewPhoto = null })
+    }
+
+    editPhoto?.let { photo ->
+        EditPhotoDialog(
+            photo = photo,
+            onSave = { t, c ->
+                photos = photos.map {
+                    if (it.id == photo.id) it.copy(title = t, comment = c) else it
+                }
+                editPhoto = null
+            },
+            onDelete = {
+                photos = photos.filterNot { it.id == photo.id }
+                editPhoto = null
+            },
+            onDismiss = { editPhoto = null }
+        )
+    }
+}
+
+@Composable
+private fun YellowField(
+    value: String, onValueChange: (String) -> Unit,
+    label: String, modifier: Modifier = Modifier
+) {
+    Box(
+        modifier
+            .background(Yellow, RoundedCornerShape(8.dp))
+            .border(BlueBorder, RoundedCornerShape(8.dp))
+            .padding(4.dp)
+    ) {
+        OutlinedTextField(
+            value = value, onValueChange = onValueChange,
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun YellowBigButton(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
+        border = BorderStroke(7.dp, Blue),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.height(64.dp)
+    ) {
+        Icon(icon, null, modifier = Modifier.size(32.dp))
+    }
+}
