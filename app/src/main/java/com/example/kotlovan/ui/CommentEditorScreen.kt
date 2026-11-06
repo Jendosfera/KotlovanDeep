@@ -1,6 +1,5 @@
 package com.example.kotlovan.ui
 
-import kotlinx.coroutines.delay
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -10,7 +9,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +35,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -82,6 +81,13 @@ fun CommentEditorScreen(
     val cell = vm.cell(row, col, depth) ?: return
     val pin = cell.comments.firstOrNull { it.id == id } ?: return
     val ctx = LocalContext.current
+    val key = vm.active.key(row, col, depth)
+
+    // Определяем, где хранится комментарий: обычный (в cell.comments)
+    // или фотофиксации (в config.photoComments[key])
+    val isPhotoComment = remember(vm.config.photoComments, id) {
+        vm.config.photoComments[key]?.any { it.id == id } == true
+    }
 
     var title by remember { mutableStateOf(pin.title) }
     var text by remember { mutableStateOf(pin.text) }
@@ -95,23 +101,29 @@ fun CommentEditorScreen(
     var viewPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
-	// Автосохранение при любом изменении (с задержкой)
-	LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
-		delay(400)
-		val curCell = vm.cell(row, col, depth) ?: return@LaunchedEffect
-		val curPin = curCell.comments.firstOrNull { it.id == id } ?: return@LaunchedEffect
-		if (curPin.title == title && curPin.text == text &&
-			curPin.shortLabel == shortLabel && curPin.color == color &&
-			curPin.iconType == iconType && curPin.photos == photos &&
-			curPin.rating == rating) return@LaunchedEffect
-		vm.setComments(row, col, curCell.comments.map {
-			if (it.id == id) it.copy(
-				title = title, text = text, shortLabel = shortLabel,
-				color = color, iconType = iconType, photos = photos, rating = rating
-			) else it
-		}, depth)
-		vm.autosave()
-	}
+
+    // Автосохранение каждые 400 мс после изменения
+    LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
+        kotlinx.coroutines.delay(400)
+        saveCurrent()
+    }
+
+    fun saveCurrent() {
+        val curCell = vm.cell(row, col, depth) ?: return
+        val curPin = curCell.comments.firstOrNull { it.id == id } ?: return
+        if (curPin.title == title && curPin.text == text &&
+            curPin.shortLabel == shortLabel && curPin.color == color &&
+            curPin.iconType == iconType && curPin.photos == photos &&
+            curPin.rating == rating) return
+        vm.setComments(row, col, curCell.comments.map {
+            if (it.id == id) it.copy(
+                title = title, text = text, shortLabel = shortLabel,
+                color = color, iconType = iconType, photos = photos, rating = rating
+            ) else it
+        }, depth)
+        vm.autosave()
+    }
+
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
@@ -175,6 +187,37 @@ fun CommentEditorScreen(
         nav.popBackStack()
     }
 
+    fun moveToPhoto() {
+        // Перенос в фоторежим: удаляем из cell.comments, добавляем в photoComments[key]
+        val currentPin = pin.copy(
+            title = title, text = text, shortLabel = shortLabel,
+            color = color, iconType = iconType, photos = photos, rating = rating
+        )
+        vm.setComments(row, col, cell.comments.filterNot { it.id == id }, depth)
+        val currentPhoto = vm.config.photoComments[key].orEmpty()
+        vm.config = vm.config.copy(
+            photoComments = vm.config.photoComments + (key to (currentPhoto + currentPin))
+        )
+        vm.autosave()
+        nav.popBackStack()
+    }
+
+    fun moveToNormal() {
+        // Перенос в обычные: удаляем из photoComments[key], добавляем в cell.comments
+        val currentPin = pin.copy(
+            title = title, text = text, shortLabel = shortLabel,
+            color = color, iconType = iconType, photos = photos, rating = rating
+        )
+        val currentPhoto = vm.config.photoComments[key].orEmpty()
+        vm.config = vm.config.copy(
+            photoComments = vm.config.photoComments +
+                    (key to currentPhoto.filterNot { it.id == id })
+        )
+        vm.setComments(row, col, cell.comments + currentPin, depth)
+        vm.autosave()
+        nav.popBackStack()
+    }
+
     LaunchedEffect(Unit) {
         if (autoCamera) launchCamera()
     }
@@ -185,9 +228,19 @@ fun CommentEditorScreen(
             initialX = pin.x, initialY = pin.y,
             onCancel = { moving = false },
             onConfirm = { nx, ny ->
-                vm.setComments(row, col, cell.comments.map {
-                    if (it.id == id) it.copy(x = nx, y = ny) else it
-                }, depth)
+                // Обновляем координаты в том же хранилище, где лежит пин
+                if (isPhotoComment) {
+                    val cur = vm.config.photoComments[key].orEmpty()
+                    vm.config = vm.config.copy(
+                        photoComments = vm.config.photoComments +
+                                (key to cur.map { if (it.id == id) it.copy(x = nx, y = ny) else it })
+                    )
+                } else {
+                    vm.setComments(row, col, cell.comments.map {
+                        if (it.id == id) it.copy(x = nx, y = ny) else it
+                    }, depth)
+                }
+                vm.autosave()
                 moving = false
             }
         )
@@ -202,7 +255,17 @@ fun CommentEditorScreen(
                 }
                 Text("Комментарий", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { showStyleDialog = true }) { Icon(Icons.Default.Mood, "Стиль") }
+                // Кнопка перевода обычный <-> фотофиксация
+                IconButton(onClick = { if (isPhotoComment) moveToNormal() else moveToPhoto() }) {
+                    Icon(
+                        Icons.Default.SwapHoriz,
+                        if (isPhotoComment) "В обычные" else "В фотофиксацию",
+                        tint = if (isPhotoComment) Color(0xFF4CAF50) else Blue
+                    )
+                }
+                IconButton(onClick = { showStyleDialog = true }) {
+                    Icon(Icons.Default.Mood, "Стиль")
+                }
                 IconButton(onClick = {
                     nav.navigate("linkpicker/$row/$col/$id?depth=$depth")
                 }) {
@@ -210,8 +273,12 @@ fun CommentEditorScreen(
                         modifier = Modifier.size(28.dp),
                         tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray)
                 }
-                IconButton(onClick = { moving = true }) { Icon(Icons.Default.GpsFixed, "Переместить") }
-                IconButton(onClick = { save() }) { Icon(Icons.Default.Save, "Сохранить") }
+                IconButton(onClick = { moving = true }) {
+                    Icon(Icons.Default.GpsFixed, "Переместить")
+                }
+                IconButton(onClick = { save() }) {
+                    Icon(Icons.Default.Save, "Сохранить")
+                }
             }
             Spacer(Modifier.height(8.dp))
 
