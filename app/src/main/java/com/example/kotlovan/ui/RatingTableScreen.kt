@@ -41,7 +41,8 @@ import com.example.kotlovan.data.CommentPin
 import com.example.kotlovan.vm.AppViewModel
 
 private data class RatingRow(
-    val pin: CommentPin, val row: Int, val col: Int, val depth: Int, val isAux: Boolean
+    val pin: CommentPin, val row: Int, val col: Int, val depth: Int,
+    val isAux: Boolean, val isPhoto: Boolean
 )
 
 @Composable
@@ -54,16 +55,24 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
         vm.config.photoComments, vm.photoModeActive
     ) {
         val list = mutableListOf<RatingRow>()
+
         fun collect(cells: Map<String, CellData>, isAux: Boolean, usePhoto: Boolean) {
             for ((k, c) in cells) {
                 val p = k.split(",")
                 val r = p.getOrNull(0)?.toIntOrNull() ?: continue
                 val cc = p.getOrNull(1)?.toIntOrNull() ?: continue
                 val dd = p.getOrNull(2)?.toIntOrNull() ?: 0
-                val comments = if (usePhoto) vm.config.photoComments[k].orEmpty() else c.comments
-                for (pin in comments) list += RatingRow(pin, r, cc, dd, isAux)
+                if (usePhoto) {
+                    // Только photoComments
+                    val photo = vm.config.photoComments[k].orEmpty()
+                    for (pin in photo) list += RatingRow(pin, r, cc, dd, isAux, true)
+                } else {
+                    // Только обычные
+                    for (pin in c.comments) list += RatingRow(pin, r, cc, dd, isAux, false)
+                }
             }
         }
+
         if (vm.photoModeActive) {
             collect(vm.config.main.cells, false, true)
             collect(vm.config.aux.cells, true, true)
@@ -89,21 +98,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                 IconButton(onClick = { nav.popBackStack() }) {
                     Icon(Icons.Default.ArrowBack, "Назад", tint = blue)
                 }
-                Text("Рейтинг комментариев", color = blue, fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold)
+                Text(
+                    if (vm.photoModeActive) "Рейтинг (фото)" else "Рейтинг комментариев",
+                    color = blue, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.weight(1f))
             }
 
-            Row(Modifier.fillMaxWidth().background(yellow)
-                .border(3.dp, Color.Black).padding(4.dp)) {
-                Text("Рейтинг", Modifier.width(70.dp), color = Color.Black,
-                    fontWeight = FontWeight.Bold)
-                Text("Название", Modifier.weight(1f), color = Color.Black,
-                    fontWeight = FontWeight.Bold)
-                Text("Строка", Modifier.width(80.dp), color = Color.Black,
-                    fontWeight = FontWeight.Bold)
-                Text("Столбец", Modifier.width(80.dp), color = Color.Black,
-                    fontWeight = FontWeight.Bold)
+            Row(
+                Modifier.fillMaxWidth().background(yellow)
+                    .border(3.dp, Color.Black).padding(4.dp)
+            ) {
+                Text("Рейтинг", Modifier.width(70.dp), color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Название", Modifier.weight(1f), color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Строка", Modifier.width(80.dp), color = Color.Black, fontWeight = FontWeight.Bold)
+                Text("Столбец", Modifier.width(80.dp), color = Color.Black, fontWeight = FontWeight.Bold)
             }
 
             LazyColumn(Modifier.weight(1f).border(3.dp, Color.Black), state = listState) {
@@ -121,15 +130,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                                 detectTapGestures(onDoubleTap = { editRating = r })
                             },
                             contentAlignment = Alignment.Center
-                        ) { Text("${r.pin.rating}", color = Color.Black,
-                            fontWeight = FontWeight.Bold) }
+                        ) {
+                            Text("${r.pin.rating}", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
 
                         Box(
                             Modifier.weight(1f).pointerInput(r.pin.id) {
                                 detectTapGestures(onDoubleTap = {
                                     vm.lastRatingRow = idx
                                     vm.useAux = r.isAux
-                                    nav.navigate("comment/${r.row}/${r.col}/${r.pin.id}?depth=${r.depth}")
+                                    // Фото-комментарии открываются в карточке с depth,
+                                    // но без photoModeActive флага — карточка редактирует
+                                    // то хранилище, где пин реально лежит (через updatePin).
+                                    nav.navigate(
+                                        "comment/${r.row}/${r.col}/${r.pin.id}?depth=${r.depth}"
+                                    )
                                 })
                             }
                         ) {
@@ -184,12 +199,21 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
                 TextButton(onClick = {
                     val newVal = text.toIntOrNull() ?: r.pin.rating
                     vm.useAux = r.isAux
+                    // Универсальный updatePin — сам разберётся, где пин
                     val cur = vm.cell(r.row, r.col, r.depth)
                     if (cur != null) {
-                        val updated = cur.comments.map {
-                            if (it.id == r.pin.id) it.copy(rating = newVal) else it
+                        val pinObj = cur.comments.firstOrNull { it.id == r.pin.id }
+                        if (pinObj != null) {
+                            vm.updatePin(r.row, r.col, r.depth, pinObj.copy(rating = newVal))
+                        } else {
+                            // пин в photoComments
+                            val photoPin = vm.config.photoComments[
+                                vm.active.key(r.row, r.col, r.depth)
+                            ]?.firstOrNull { it.id == r.pin.id }
+                            if (photoPin != null) {
+                                vm.updatePin(r.row, r.col, r.depth, photoPin.copy(rating = newVal))
+                            }
                         }
-                        vm.setComments(r.row, r.col, updated, r.depth)
                     }
                     vm.autosave()
                     editRating = null
@@ -210,21 +234,17 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Column {
                     for (r in allRows) {
-                        Row(Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = r !in vm.hiddenRows,
                                 onCheckedChange = { vm.toggleRowVisibility(r) }
                             )
-                            Text(vm.config.main.rowLabels[r] ?: "R${r + 1}",
-                                color = Color.Black)
+                            Text(vm.config.main.rowLabels[r] ?: "R${r + 1}", color = Color.Black)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showRowsDialog = false }) {
-                Text("OK")
-            } }
+            confirmButton = { TextButton(onClick = { showRowsDialog = false }) { Text("OK") } }
         )
     }
 
@@ -239,21 +259,17 @@ fun RatingTableScreen(nav: NavHostController, vm: AppViewModel) {
             text = {
                 Column {
                     for (c in allCols) {
-                        Row(Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = c !in vm.hiddenCols,
                                 onCheckedChange = { vm.toggleColVisibility(c) }
                             )
-                            Text(vm.config.main.colLabels[c] ?: "C${c + 1}",
-                                color = Color.Black)
+                            Text(vm.config.main.colLabels[c] ?: "C${c + 1}", color = Color.Black)
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showColsDialog = false }) {
-                Text("OK")
-            } }
+            confirmButton = { TextButton(onClick = { showColsDialog = false }) { Text("OK") } }
         )
     }
 }
