@@ -177,7 +177,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val map = active.cells.toMutableMap()
         val pc = config.photoComments.toMutableMap()
         map.remove(key); pc.remove(key)
-        // Сдвиг глубже
         val deeper = map.keys.filter {
             val p = it.split(",")
             p.size == 3 && p[0].toIntOrNull() == r && p[1].toIntOrNull() == c &&
@@ -197,7 +196,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    /** Обмен местами двух цепочек (включая хвосты). Используется в "перестановке". */
     fun swapCells(r1: Int, c1: Int, d1: Int, r2: Int, c2: Int, d2: Int) {
         val map = active.cells.toMutableMap()
         val pc = config.photoComments.toMutableMap()
@@ -235,19 +233,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hasUnsavedChanges = true
     }
 
-    /**
-     * Переносит цепочку (sr,sc,sd)+(sd+1)+... на (tr,tc).
-     * - пусто: цепочка выравнивается на d=0 (sd → 0)
-     * - непусто: цепочка встаёт после последней существующей (newBase = depthAt(tr,tc)+1)
-     */
     fun moveTail(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
-        // Ничего не двигаем, если это точно то же место и тот же стартовый d
         if (sr == tr && sc == tc) return
 
         val map = active.cells.toMutableMap()
         val pc = config.photoComments.toMutableMap()
 
-        // Собираем цепочку
         val chain = mutableListOf<Pair<CellData, List<CommentPin>?>>()
         var d = sd
         while (true) {
@@ -257,7 +248,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             d++
         }
         if (chain.isEmpty()) {
-            // нечего переносить — откатим
             config = when {
                 useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
                 else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
@@ -265,8 +255,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        // Считаем base: если target пуст после нашего remove (он мог быть тем же tr,sc,sd) — 
-        // проверяем остаток по map
         var targetMax = -1
         var k = 0
         while (map.containsKey(active.key(tr, tc, k))) {
@@ -289,10 +277,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         autosave()
     }
 
-    /**
-     * Вкладывает цепочку (sr,sc,sd)+... под (tr,tc). Target обязательно должен существовать.
-     * По сути — moveTail с проверкой.
-     */
     fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
         if (sr == tr && sc == tc) return
         if (active.cell(sr, sc, sd) == null) return
@@ -335,6 +319,111 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Обновление одного пина в любом хранилище.
+     * Приоритет — по фактическому нахождению: если пин есть в photoComments[key],
+     * обновляем там, иначе — в cell.comments.
+     */
+    fun updatePin(r: Int, c: Int, d: Int, pin: CommentPin) {
+        val key = active.key(r, c, d)
+        val sub = active
+        val cell = sub.cell(r, c, d) ?: return
+
+        val inPhoto = config.photoComments[key]?.any { it.id == pin.id } == true
+        val inNormal = cell.comments.any { it.id == pin.id }
+
+        when {
+            inPhoto -> {
+                val photo = config.photoComments[key].orEmpty().map {
+                    if (it.id == pin.id) pin else it
+                }
+                config = config.copy(photoComments = config.photoComments + (key to photo))
+            }
+            inNormal -> {
+                val map = sub.cells.toMutableMap()
+                map[sub.key(r, c, d)] = cell.copy(comments = cell.comments.map {
+                    if (it.id == pin.id) pin else it
+                })
+                config = when {
+                    useAux -> config.copy(aux = config.aux.copy(cells = map))
+                    else -> config.copy(main = config.main.copy(cells = map))
+                }
+            }
+            else -> {
+                // Пина нет ни там, ни там — пишем по текущему photoModeActive
+                if (photoModeActive) {
+                    val photo = config.photoComments[key].orEmpty() + pin
+                    config = config.copy(photoComments = config.photoComments + (key to photo))
+                } else {
+                    val map = sub.cells.toMutableMap()
+                    map[sub.key(r, c, d)] = cell.copy(comments = cell.comments + pin)
+                    config = when {
+                        useAux -> config.copy(aux = config.aux.copy(cells = map))
+                        else -> config.copy(main = config.main.copy(cells = map))
+                    }
+                }
+            }
+        }
+        hasUnsavedChanges = true
+    }
+
+    fun deletePin(r: Int, c: Int, d: Int, pinId: String) {
+        val key = active.key(r, c, d)
+        val sub = active
+        val cell = sub.cell(r, c, d) ?: return
+
+        val inPhoto = config.photoComments[key]?.any { it.id == pinId } == true
+        val inNormal = cell.comments.any { it.id == pinId }
+
+        if (inPhoto) {
+            val photo = config.photoComments[key].orEmpty().filterNot { it.id == pinId }
+            config = config.copy(photoComments = config.photoComments + (key to photo))
+        }
+        if (inNormal) {
+            val map = sub.cells.toMutableMap()
+            map[sub.key(r, c, d)] = cell.copy(comments = cell.comments.filterNot { it.id == pinId })
+            config = when {
+                useAux -> config.copy(aux = config.aux.copy(cells = map))
+                else -> config.copy(main = config.main.copy(cells = map))
+            }
+        }
+        hasUnsavedChanges = true
+    }
+
+    /**
+     * Переносит пин между обычными комментариями и photoComments.
+     * toPhoto = true: normal → photo; false: photo → normal.
+     */
+    fun movePinBetweenStores(r: Int, c: Int, d: Int, pinId: String, toPhoto: Boolean) {
+        val key = active.key(r, c, d)
+        val sub = active
+        val cell = sub.cell(r, c, d) ?: return
+
+        if (toPhoto) {
+            val pin = cell.comments.firstOrNull { it.id == pinId } ?: return
+            val map = sub.cells.toMutableMap()
+            map[sub.key(r, c, d)] = cell.copy(comments = cell.comments.filterNot { it.id == pinId })
+            config = when {
+                useAux -> config.copy(aux = config.aux.copy(cells = map))
+                else -> config.copy(main = config.main.copy(cells = map))
+            }
+            val photo = config.photoComments[key].orEmpty()
+            config = config.copy(photoComments = config.photoComments + (key to (photo + pin)))
+        } else {
+            val pin = config.photoComments[key]?.firstOrNull { it.id == pinId } ?: return
+            val photo = config.photoComments[key].orEmpty().filterNot { it.id == pinId }
+            config = config.copy(photoComments = config.photoComments + (key to photo))
+            val map = sub.cells.toMutableMap()
+            map[sub.key(r, c, d)] = cell.copy(comments = cell.comments + pin)
+            config = when {
+                useAux -> config.copy(aux = config.aux.copy(cells = map))
+                else -> config.copy(main = config.main.copy(cells = map))
+            }
+        }
+        hasUnsavedChanges = true
+        autosave()
+    }
+
     fun updateLastCell(r: Int, c: Int, d: Int = 0) {
         config = when {
             useAux -> config.copy(aux = config.aux.copy(lastRow = r, lastCol = c, lastDepth = d))
@@ -375,12 +464,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)
         hasUnsavedChanges = true
-    }
-
-    /** Отделить — оставлено как алиас moveTail для совместимости. */
-    fun unnest(sr: Int, sc: Int, sd: Int) {
-        if (sd <= 0) return
-        moveTail(sr, sc, sd, sr, sc)   // пустое место не имеет смысла, no-op
     }
 
     private fun migrateSub(sub: SubArray): SubArray {
