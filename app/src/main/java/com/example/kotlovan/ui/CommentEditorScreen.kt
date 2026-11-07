@@ -100,7 +100,6 @@ fun CommentEditorScreen(
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
 
-    // Обновляет config в памяти. ZIP не трогает — только SharedPreferences.
     fun applyToMemory() {
         val curPin = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id } ?: return
         vm.updatePin(row, col, depth, curPin.copy(
@@ -109,18 +108,53 @@ fun CommentEditorScreen(
         ))
     }
 
-    // Дебаунс-обновление config в памяти + SharedPreferences (дешево)
+    // Дебаунс-обновление config в памяти + SharedPreferences
     LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
         kotlinx.coroutines.delay(400)
         applyToMemory()
-        vm.autosave()   // только SharedPreferences
+        vm.autosave()
     }
 
-    // На выходе с экрана — тоже обновить память + SharedPreferences
     DisposableEffect(Unit) {
         onDispose {
             applyToMemory()
             vm.autosave()
+        }
+    }
+
+    // Монитор автосохранения раз в 30 сек
+    UnsavedMonitor(vm)
+
+    // SAF лончер — используется, если boundSaveUri ещё не задан
+    val zipSaver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            if (vm.onUserSave(uri)) {
+                Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun saveWithZip() {
+        applyToMemory()
+        vm.autosave()
+        if (vm.boundSaveUri != null) {
+            if (vm.saveCurrentUri()) {
+                Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            // URI ещё не задан — открываем SAF
+            zipSaver.launch("array.zip")
         }
     }
 
@@ -180,18 +214,6 @@ fun CommentEditorScreen(
         }
     }
 
-    /**
-     * Явное сохранение в ZIP по кнопке «Дискета» в карточке.
-     * Обновляет память + SharedPreferences, затем открывает
-     * SAF-диалог для сохранения ZIP (если boundSaveUri нет — пользователь
-     * выберет файл; если есть — перезапишет).
-     */
-    fun saveExplicit() {
-        applyToMemory()
-        vm.autosave()
-        nav.popBackStack()
-    }
-
     fun moveToPhoto() {
         applyToMemory()
         vm.movePinBetweenStores(row, col, depth, id, toPhoto = true)
@@ -224,100 +246,102 @@ fun CommentEditorScreen(
         return
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { nav.popBackStack() }) {
-                    Icon(Icons.Default.ArrowBack, "Назад")
+    Column(Modifier.fillMaxSize()) {
+        UnsavedBanner(vm)
+
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { nav.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, "Назад")
+                    }
+                    Text("Комментарий", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { if (isPhotoComment) moveToNormal() else moveToPhoto() }) {
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            if (isPhotoComment) "В обычные" else "В фотофиксацию",
+                            tint = if (isPhotoComment) Color(0xFF4CAF50) else Blue
+                        )
+                    }
+                    IconButton(onClick = { showStyleDialog = true }) {
+                        Icon(Icons.Default.Mood, "Стиль")
+                    }
+                    IconButton(onClick = {
+                        nav.navigate("linkpicker/$row/$col/$id?depth=$depth")
+                    }) {
+                        Icon(Icons.Default.Link, "Ссылка",
+                            modifier = Modifier.size(28.dp),
+                            tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray)
+                    }
+                    IconButton(onClick = { moving = true }) {
+                        Icon(Icons.Default.GpsFixed, "Переместить")
+                    }
+                    IconButton(onClick = { saveWithZip() }) {
+                        Icon(Icons.Default.Save, "Сохранить в ZIP")
+                    }
                 }
-                Text("Комментарий", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { if (isPhotoComment) moveToNormal() else moveToPhoto() }) {
-                    Icon(
-                        Icons.Default.SwapHoriz,
-                        if (isPhotoComment) "В обычные" else "В фотофиксацию",
-                        tint = if (isPhotoComment) Color(0xFF4CAF50) else Blue
+                Spacer(Modifier.height(8.dp))
+
+                YellowField(
+                    value = title, onValueChange = { title = it }, label = "Название",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                YellowField(
+                    value = shortLabel,
+                    onValueChange = { if (it.length <= 3) shortLabel = it },
+                    label = "Метка", modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                YellowField(
+                    value = text, onValueChange = { text = it }, label = "Текст",
+                    modifier = Modifier.fillMaxWidth().height(140.dp)
+                )
+
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    YellowBigButton(
+                        onClick = { launchCamera() },
+                        icon = Icons.Default.PhotoCamera,
+                        modifier = Modifier.weight(1f)
+                    )
+                    YellowBigButton(
+                        onClick = { pickPhotoLauncher.launch(arrayOf("image/*")) },
+                        icon = Icons.Default.Image,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                IconButton(onClick = { showStyleDialog = true }) {
-                    Icon(Icons.Default.Mood, "Стиль")
-                }
-                IconButton(onClick = {
-                    nav.navigate("linkpicker/$row/$col/$id?depth=$depth")
-                }) {
-                    Icon(Icons.Default.Link, "Ссылка",
-                        modifier = Modifier.size(28.dp),
-                        tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray)
-                }
-                IconButton(onClick = { moving = true }) {
-                    Icon(Icons.Default.GpsFixed, "Переместить")
-                }
-                // Кнопка «Сохранить» (дискета) — обновляет память + SharedPreferences,
-                // НЕ трогает ZIP. ZIP сохраняется через «Сохранить массив» в builder.
-                IconButton(onClick = { saveExplicit() }) {
-                    Icon(Icons.Default.Save, "Применить")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
 
-            YellowField(
-                value = title, onValueChange = { title = it }, label = "Название",
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            YellowField(
-                value = shortLabel,
-                onValueChange = { if (it.length <= 3) shortLabel = it },
-                label = "Метка", modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            YellowField(
-                value = text, onValueChange = { text = it }, label = "Текст",
-                modifier = Modifier.fillMaxWidth().height(140.dp)
-            )
-
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                YellowBigButton(
-                    onClick = { launchCamera() },
-                    icon = Icons.Default.PhotoCamera,
-                    modifier = Modifier.weight(1f)
+                PhotosRow(
+                    photos = photos, vm = vm,
+                    onView = { viewPhoto = it },
+                    onEdit = { editPhoto = it }
                 )
-                YellowBigButton(
-                    onClick = { pickPhotoLauncher.launch(arrayOf("image/*")) },
-                    icon = Icons.Default.Image,
-                    modifier = Modifier.weight(1f)
-                )
+
+                Spacer(Modifier.height(80.dp))
             }
 
-            PhotosRow(
-                photos = photos, vm = vm,
-                onView = { viewPhoto = it },
-                onEdit = { editPhoto = it }
-            )
+            IconButton(
+                onClick = {
+                    vm.deletePin(row, col, depth, id)
+                    vm.autosave()
+                    nav.popBackStack()
+                },
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+            ) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
 
-            Spacer(Modifier.height(80.dp))
-        }
-
-        IconButton(
-            onClick = {
-                vm.deletePin(row, col, depth, id)
-                vm.autosave()
-                nav.popBackStack()
-            },
-            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-        ) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
-
-        Row(
-            Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { rating++ }) {
-                Icon(Icons.Default.ArrowUpward, "↑", tint = Blue)
-            }
-            Text("$rating", style = MaterialTheme.typography.titleLarge)
-            IconButton(onClick = { if (rating > -999) rating-- }) {
-                Icon(Icons.Default.ArrowDownward, "↓", tint = Color(0xFFD32F2F))
+            Row(
+                Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { rating++ }) {
+                    Icon(Icons.Default.ArrowUpward, "↑", tint = Blue)
+                }
+                Text("$rating", style = MaterialTheme.typography.titleLarge)
+                IconButton(onClick = { if (rating > -999) rating-- }) {
+                    Icon(Icons.Default.ArrowDownward, "↓", tint = Color(0xFFD32F2F))
+                }
             }
         }
     }
