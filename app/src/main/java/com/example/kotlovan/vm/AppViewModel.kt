@@ -3,6 +3,7 @@ package com.example.kotlovan.vm
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -23,6 +24,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     var hasUnsavedChanges by mutableStateOf(false)
         private set
+
+    /** URI последнего сохранения в ZIP. Восстанавливается между запусками. */
+    var boundSaveUri by mutableStateOf<Uri?>(null)
+        private set
+
+    /** Момент последнего изменения. 0L = нет несохранённых. */
+    private var lastChangeTime by mutableLongStateOf(0L)
+
+    /** Момент первого изменения после последнего сохранения. 0L = нет. */
+    private var firstUnsavedTime by mutableLongStateOf(0L)
+
+    /** Показывать баннер «есть несохранённые изменения». */
+    var showUnsavedBanner by mutableStateOf(false)
+        private set
+
+    /** Порог для автосохранения и баннера. */
+    val unsavedThresholdMs: Long = 5 * 60 * 1000L
 
     var useAux by mutableStateOf(false)
     var photoModeActive by mutableStateOf(false)
@@ -47,6 +65,89 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         repo.loadAutosave()?.let { config = normalize(it) }
+        // Восстановить boundSaveUri, если он был
+        try {
+            val s = app.getSharedPreferences("kotlovan_prefs", 0)
+                .getString("bound_save_uri", null)
+            if (s != null) {
+                val u = Uri.parse(s)
+                if (repo.hasPersistablePermission(u)) boundSaveUri = u
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** Вызывается при каждом изменении config. */
+    fun markChanged() {
+        hasUnsavedChanges = true
+        val now = System.currentTimeMillis()
+        lastChangeTime = now
+        if (firstUnsavedTime == 0L) firstUnsavedTime = now
+    }
+
+    /** Сбрасывает счётчики — после сохранения. */
+    fun markSaved() {
+        hasUnsavedChanges = false
+        lastChangeTime = 0L
+        firstUnsavedTime = 0L
+        showUnsavedBanner = false
+    }
+
+    /**
+     * Периодический тик — вызывается из UI раз в 30 сек.
+     * Обновляет `showUnsavedBanner` и (если условия) вызывает автосохранение.
+     */
+    fun tickUnsavedMonitor() {
+        if (!hasUnsavedChanges) return
+        val now = System.currentTimeMillis()
+        val firstDelta = if (firstUnsavedTime > 0) now - firstUnsavedTime else 0L
+        val lastDelta = if (lastChangeTime > 0) now - lastChangeTime else 0L
+
+        // Баннер: с первого несохранённого изменения > 5 мин
+        showUnsavedBanner = firstDelta > unsavedThresholdMs
+
+        // Автосохранение: с последнего изменения > 5 мин И с первого > 5 мин
+        if (lastDelta > unsavedThresholdMs && firstDelta > unsavedThresholdMs) {
+            saveCurrentUri()
+        }
+    }
+
+    /**
+     * Сохранить в текущий boundSaveUri. Если URI нет — false.
+     * Возвращает true, если запись прошла.
+     */
+    fun saveCurrentUri(): Boolean {
+        val uri = boundSaveUri ?: return false
+        return try {
+            val finalConfig = repo.saveAsZip(config, uri) ?: return false
+            config = finalConfig
+            repo.autosave(config)
+            markSaved()
+            true
+        } catch (_: Throwable) { false }
+    }
+
+    /**
+     * Пользователь выбрал URI через SAF и хочет сохранить.
+     * Присваивает boundSaveUri и пишет ZIP.
+     */
+    fun onUserSave(uri: Uri): Boolean {
+        return try {
+            val finalConfig = repo.saveAsZip(config, uri) ?: return false
+            config = finalConfig
+            boundSaveUri = uri
+            persistBoundUri(uri)
+            repo.autosave(config)
+            markSaved()
+            true
+        } catch (_: Throwable) { false }
+    }
+
+    private fun persistBoundUri(uri: Uri) {
+        try {
+            getApplication<Application>()
+                .getSharedPreferences("kotlovan_prefs", 0)
+                .edit().putString("bound_save_uri", uri.toString()).apply()
+        } catch (_: Exception) {}
     }
 
     fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
@@ -65,23 +166,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun newArray() {
         config = ArrayConfig()
         useAux = false; photoModeActive = false
-        hasUnsavedChanges = true
+        boundSaveUri = null
+        markSaved()
     }
 
     fun load(uri: Uri): Boolean {
         val fromZip = repo.loadFromZip(uri)
         if (fromZip != null) {
             config = normalize(fromZip)
+            boundSaveUri = uri
+            persistBoundUri(uri)
             useAux = false; photoModeActive = false
             pendingReconnect = emptyList()
-            hasUnsavedChanges = false
+            markSaved()
             return true
         }
         val fromJson = repo.loadFromUri(uri) ?: return false
         config = normalize(fromJson)
         useAux = false; photoModeActive = false
         pendingReconnect = emptyList()
-        hasUnsavedChanges = false
+        markSaved()
         return true
     }
 
@@ -98,34 +202,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )))
         }
         config = config.copy(main = fixSub(config.main), aux = fixSub(config.aux))
+        markChanged()
     }
 
-    /**
-     * Явное сохранение в ZIP — вызывается ТОЛЬКО по кнопке
-     * («Сохранить массив» в builder, «Дискета» в карточке комментария,
-     * «Сохранить архив» в фоторежиме).
-     */
-    fun save(uri: Uri): Boolean {
-        val finalConfig = repo.saveAsZip(config, uri) ?: return false
-        config = finalConfig
-        hasUnsavedChanges = false
-        // Дублируем в SharedPreferences — на случай закрытия приложения
-        repo.autosave(config)
-        return true
-    }
+    /** Сохранить по URI (SAF). Обновляет boundSaveUri. */
+    fun save(uri: Uri): Boolean = onUserSave(uri)
 
-    fun savePhotoArchive(uri: Uri): Boolean {
-        val finalConfig = repo.saveAsZip(config, uri) ?: return false
-        config = finalConfig
-        hasUnsavedChanges = false
-        repo.autosave(config)
-        return true
-    }
+    fun savePhotoArchive(uri: Uri): Boolean = onUserSave(uri)
 
     fun loadPhotoArchive(uri: Uri): Boolean {
         val loaded = repo.loadFromZip(uri) ?: return false
         config = normalize(loaded)
-        hasUnsavedChanges = false
+        boundSaveUri = uri
+        persistBoundUri(uri)
+        markSaved()
         return true
     }
 
@@ -149,8 +239,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return repo.generatePhotoReport(merged, selectedPins, from, to, uri)
     }
 
-    /** Только SharedPreferences, НЕ трогает ZIP. */
-    fun autosave() { repo.autosave(config); hasUnsavedChanges = false }
+    /** Только SharedPreferences. */
+    fun autosave() { repo.autosave(config) }
 
     fun cell(r: Int, c: Int, d: Int = 0): CellData? {
         val base = active.cell(r, c, d) ?: return null
@@ -180,7 +270,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             config = config.copy(photoComments = config.photoComments +
                     (active.key(r, c, d) to commentsToRestore))
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun removeCell(r: Int, c: Int, d: Int = 0) {
@@ -204,7 +294,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
             else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun swapCells(r1: Int, c1: Int, d1: Int, r2: Int, c2: Int, d2: Int) {
@@ -241,7 +331,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
             else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun moveTail(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
@@ -284,7 +374,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             useAux -> config.copy(aux = config.aux.copy(cells = map), photoComments = pc)
             else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
@@ -303,6 +393,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 globalScale = scale, globalOffsetX = vOx, globalOffsetY = vOy,
                 lastRow = r, lastCol = c, lastDepth = d))
         }
+        // Viewport не считаем «несохранённым изменением» для баннера — это не критично
         hasUnsavedChanges = true
     }
 
@@ -316,14 +407,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> config.copy(main = config.main.copy(
                 cells = config.main.cells + (config.main.key(r, c, d) to toStore)))
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun setComments(r: Int, c: Int, comments: List<CommentPin>, d: Int = 0) {
         if (photoModeActive) {
             val key = active.key(r, c, d)
             config = config.copy(photoComments = config.photoComments + (key to comments))
-            hasUnsavedChanges = true
+            markChanged()
         } else {
             updateCell(r, c, d) { it.copy(comments = comments) }
         }
@@ -368,7 +459,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun deletePin(r: Int, c: Int, d: Int, pinId: String) {
@@ -391,7 +482,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else -> config.copy(main = config.main.copy(cells = map))
             }
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun movePinBetweenStores(r: Int, c: Int, d: Int, pinId: String, toPhoto: Boolean) {
@@ -420,7 +511,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 else -> config.copy(main = config.main.copy(cells = map))
             }
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun updateLastCell(r: Int, c: Int, d: Int = 0) {
@@ -428,6 +519,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             useAux -> config.copy(aux = config.aux.copy(lastRow = r, lastCol = c, lastDepth = d))
             else -> config.copy(main = config.main.copy(lastRow = r, lastCol = c, lastDepth = d))
         }
+        // lastRow/lastCol — не критичные изменения для баннера.
         hasUnsavedChanges = true
     }
 
@@ -440,7 +532,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 rowLabels = if (label.isBlank()) config.main.rowLabels - r
                 else config.main.rowLabels + (r to label)))
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
     fun setColLabel(c: Int, label: String) {
         config = when {
@@ -451,7 +543,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 colLabels = if (label.isBlank()) config.main.colLabels - c
                 else config.main.colLabels + (c to label)))
         }
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     fun setCommentLink(r: Int, c: Int, id: String, link: PinLink?, d: Int = 0) {
@@ -462,7 +554,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setIconSettings(size: Float, opacity: Float) {
         config = config.copy(iconSize = size, iconOpacity = opacity)
-        hasUnsavedChanges = true
+        markChanged()
     }
 
     private fun migrateSub(sub: SubArray): SubArray {
