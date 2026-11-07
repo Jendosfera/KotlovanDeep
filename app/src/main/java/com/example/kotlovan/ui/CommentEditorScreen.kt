@@ -100,30 +100,27 @@ fun CommentEditorScreen(
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
 
-    fun saveCurrent() {
+    // Обновляет config в памяти. ZIP не трогает — только SharedPreferences.
+    fun applyToMemory() {
         val curPin = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id } ?: return
-        if (curPin.title == title && curPin.text == text &&
-            curPin.shortLabel == shortLabel && curPin.color == color &&
-            curPin.iconType == iconType && curPin.photos == photos &&
-            curPin.rating == rating) return
         vm.updatePin(row, col, depth, curPin.copy(
             title = title, text = text, shortLabel = shortLabel,
             color = color, iconType = iconType, photos = photos, rating = rating
         ))
-        // Автосохранение в файл (если boundSaveUri задан)
-        vm.autosaveNow()
     }
 
+    // Дебаунс-обновление config в памяти + SharedPreferences (дешево)
     LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
         kotlinx.coroutines.delay(400)
-        saveCurrent()
+        applyToMemory()
+        vm.autosave()   // только SharedPreferences
     }
 
-    // Автосохранение при выходе с экрана
+    // На выходе с экрана — тоже обновить память + SharedPreferences
     DisposableEffect(Unit) {
         onDispose {
-            // Финальное сохранение — но без дебаунса, сразу
-            vm.autosaveNow()
+            applyToMemory()
+            vm.autosave()
         }
     }
 
@@ -133,7 +130,8 @@ fun CommentEditorScreen(
         val name = pendingPhotoName
         if (success && name != null) {
             photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
-            vm.autosaveNow()
+            applyToMemory()
+            vm.autosave()
         } else if (!success && name != null) {
             Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
         }
@@ -174,39 +172,37 @@ fun CommentEditorScreen(
                     vm.repo.photoFile(name).outputStream().use { out -> input.copyTo(out) }
                 }
                 photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
-                vm.autosaveNow()
+                applyToMemory()
+                vm.autosave()
             } catch (_: Exception) {
                 Toast.makeText(ctx, "Не удалось скопировать фото", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    fun save() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
-        vm.autosaveNow()
+    /**
+     * Явное сохранение в ZIP по кнопке «Дискета» в карточке.
+     * Обновляет память + SharedPreferences, затем открывает
+     * SAF-диалог для сохранения ZIP (если boundSaveUri нет — пользователь
+     * выберет файл; если есть — перезапишет).
+     */
+    fun saveExplicit() {
+        applyToMemory()
+        vm.autosave()
         nav.popBackStack()
     }
 
     fun moveToPhoto() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
+        applyToMemory()
         vm.movePinBetweenStores(row, col, depth, id, toPhoto = true)
-        vm.autosaveNow()
+        vm.autosave()
         nav.popBackStack()
     }
 
     fun moveToNormal() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
+        applyToMemory()
         vm.movePinBetweenStores(row, col, depth, id, toPhoto = false)
-        vm.autosaveNow()
+        vm.autosave()
         nav.popBackStack()
     }
 
@@ -221,7 +217,7 @@ fun CommentEditorScreen(
             onCancel = { moving = false },
             onConfirm = { nx, ny ->
                 vm.updatePin(row, col, depth, pin.copy(x = nx, y = ny))
-                vm.autosaveNow()
+                vm.autosave()
                 moving = false
             }
         )
@@ -256,8 +252,10 @@ fun CommentEditorScreen(
                 IconButton(onClick = { moving = true }) {
                     Icon(Icons.Default.GpsFixed, "Переместить")
                 }
-                IconButton(onClick = { save() }) {
-                    Icon(Icons.Default.Save, "Сохранить")
+                // Кнопка «Сохранить» (дискета) — обновляет память + SharedPreferences,
+                // НЕ трогает ZIP. ZIP сохраняется через «Сохранить массив» в builder.
+                IconButton(onClick = { saveExplicit() }) {
+                    Icon(Icons.Default.Save, "Применить")
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -304,7 +302,7 @@ fun CommentEditorScreen(
         IconButton(
             onClick = {
                 vm.deletePin(row, col, depth, id)
-                vm.autosaveNow()
+                vm.autosave()
                 nav.popBackStack()
             },
             modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
@@ -386,13 +384,15 @@ fun CommentEditorScreen(
                 photos = photos.map {
                     if (it.id == photo.id) it.copy(title = t, comment = c) else it
                 }
+                applyToMemory()
+                vm.autosave()
                 editPhoto = null
-                vm.autosaveNow()
             },
             onDelete = {
                 photos = photos.filterNot { it.id == photo.id }
+                applyToMemory()
+                vm.autosave()
                 editPhoto = null
-                vm.autosaveNow()
             },
             onDismiss = { editPhoto = null }
         )
