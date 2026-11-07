@@ -45,6 +45,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -109,12 +110,21 @@ fun CommentEditorScreen(
             title = title, text = text, shortLabel = shortLabel,
             color = color, iconType = iconType, photos = photos, rating = rating
         ))
-        vm.autosave()
+        // Автосохранение в файл (если boundSaveUri задан)
+        vm.autosaveNow()
     }
 
     LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
         kotlinx.coroutines.delay(400)
         saveCurrent()
+    }
+
+    // Автосохранение при выходе с экрана
+    DisposableEffect(Unit) {
+        onDispose {
+            // Финальное сохранение — но без дебаунса, сразу
+            vm.autosaveNow()
+        }
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -123,6 +133,7 @@ fun CommentEditorScreen(
         val name = pendingPhotoName
         if (success && name != null) {
             photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+            vm.autosaveNow()
         } else if (!success && name != null) {
             Toast.makeText(ctx, "Фото не сохранено", Toast.LENGTH_SHORT).show()
         }
@@ -163,258 +174,8 @@ fun CommentEditorScreen(
                     vm.repo.photoFile(name).outputStream().use { out -> input.copyTo(out) }
                 }
                 photos = photos + CommentPhoto(id = UUID.randomUUID().toString(), file = name)
+                vm.autosaveNow()
             } catch (_: Exception) {
                 Toast.makeText(ctx, "Не удалось скопировать фото", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    fun save() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
-        vm.autosave()
-        nav.popBackStack()
-    }
-
-    fun moveToPhoto() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
-        vm.movePinBetweenStores(row, col, depth, id, toPhoto = true)
-        nav.popBackStack()
-    }
-
-    fun moveToNormal() {
-        vm.updatePin(row, col, depth, pin.copy(
-            title = title, text = text, shortLabel = shortLabel,
-            color = color, iconType = iconType, photos = photos, rating = rating
-        ))
-        vm.movePinBetweenStores(row, col, depth, id, toPhoto = false)
-        nav.popBackStack()
-    }
-
-    LaunchedEffect(Unit) {
-        if (autoCamera) launchCamera()
-    }
-
-    if (moving) {
-        MoveCommentOverlay(
-            cell = cell, vm = vm,
-            initialX = pin.x, initialY = pin.y,
-            onCancel = { moving = false },
-            onConfirm = { nx, ny ->
-                vm.updatePin(row, col, depth, pin.copy(x = nx, y = ny))
-                vm.autosave()
-                moving = false
-            }
-        )
-        return
-    }
-
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { nav.popBackStack() }) {
-                    Icon(Icons.Default.ArrowBack, "Назад")
-                }
-                Text("Комментарий", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = { if (isPhotoComment) moveToNormal() else moveToPhoto() }) {
-                    Icon(
-                        Icons.Default.SwapHoriz,
-                        if (isPhotoComment) "В обычные" else "В фотофиксацию",
-                        tint = if (isPhotoComment) Color(0xFF4CAF50) else Blue
-                    )
-                }
-                IconButton(onClick = { showStyleDialog = true }) {
-                    Icon(Icons.Default.Mood, "Стиль")
-                }
-                IconButton(onClick = {
-                    nav.navigate("linkpicker/$row/$col/$id?depth=$depth")
-                }) {
-                    Icon(Icons.Default.Link, "Ссылка",
-                        modifier = Modifier.size(28.dp),
-                        tint = if (pin.link != null) Color(0xFF00C853) else Color.Gray)
-                }
-                IconButton(onClick = { moving = true }) {
-                    Icon(Icons.Default.GpsFixed, "Переместить")
-                }
-                IconButton(onClick = { save() }) {
-                    Icon(Icons.Default.Save, "Сохранить")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-
-            YellowField(
-                value = title, onValueChange = { title = it }, label = "Название",
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            YellowField(
-                value = shortLabel,
-                onValueChange = { if (it.length <= 3) shortLabel = it },
-                label = "Метка", modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            YellowField(
-                value = text, onValueChange = { text = it }, label = "Текст",
-                modifier = Modifier.fillMaxWidth().height(140.dp)
-            )
-
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                YellowBigButton(
-                    onClick = { launchCamera() },
-                    icon = Icons.Default.PhotoCamera,
-                    modifier = Modifier.weight(1f)
-                )
-                YellowBigButton(
-                    onClick = { pickPhotoLauncher.launch(arrayOf("image/*")) },
-                    icon = Icons.Default.Image,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            PhotosRow(
-                photos = photos, vm = vm,
-                onView = { viewPhoto = it },
-                onEdit = { editPhoto = it }
-            )
-
-            Spacer(Modifier.height(80.dp))
-        }
-
-        IconButton(
-            onClick = {
-                vm.deletePin(row, col, depth, id)
-                vm.autosave(); nav.popBackStack()
-            },
-            modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
-        ) { Icon(Icons.Default.Delete, "Удалить", tint = Color(0xFFD32F2F)) }
-
-        Row(
-            Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { rating++ }) {
-                Icon(Icons.Default.ArrowUpward, "↑", tint = Blue)
-            }
-            Text("$rating", style = MaterialTheme.typography.titleLarge)
-            IconButton(onClick = { if (rating > -999) rating-- }) {
-                Icon(Icons.Default.ArrowDownward, "↓", tint = Color(0xFFD32F2F))
-            }
-        }
-    }
-
-    if (showStyleDialog) {
-        AlertDialog(
-            onDismissRequest = { showStyleDialog = false },
-            title = { Text("Стиль") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("Цвет:", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (c in PresetColors) {
-                            Box(
-                                Modifier
-                                    .size(28.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(c.toInt()))
-                                    .then(
-                                        if (c == color) Modifier.border(3.dp, Color.Black, CircleShape)
-                                        else Modifier
-                                    )
-                                    .clickable { color = c }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Иконка:", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (t in listOf(
-                            CommentIconType.CIRCLE, CommentIconType.SQUARE,
-                            CommentIconType.TRIANGLE, CommentIconType.DIAMOND
-                        )) {
-                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (t in listOf(
-                            CommentIconType.ROSETTE, CommentIconType.PHONE,
-                            CommentIconType.COMPUTER
-                        )) {
-                            IconTypeCell(t, iconType == t, Color(color.toInt())) { iconType = t }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showStyleDialog = false }) { Text("OK") }
-            }
-        )
-    }
-
-    viewPhoto?.let { photo ->
-        ViewPhotoDialog(photo = photo, vm = vm, onDismiss = { viewPhoto = null })
-    }
-
-    editPhoto?.let { photo ->
-        EditPhotoDialog(
-            photo = photo,
-            onSave = { t, c ->
-                photos = photos.map {
-                    if (it.id == photo.id) it.copy(title = t, comment = c) else it
-                }
-                editPhoto = null
-            },
-            onDelete = {
-                photos = photos.filterNot { it.id == photo.id }
-                editPhoto = null
-            },
-            onDismiss = { editPhoto = null }
-        )
-    }
-}
-
-@Composable
-private fun YellowField(
-    value: String, onValueChange: (String) -> Unit,
-    label: String, modifier: Modifier = Modifier
-) {
-    Box(
-        modifier
-            .background(Yellow, RoundedCornerShape(8.dp))
-            .border(BlueBorder, RoundedCornerShape(8.dp))
-            .padding(4.dp)
-    ) {
-        OutlinedTextField(
-            value = value, onValueChange = onValueChange,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun YellowBigButton(
-    onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Blue),
-        border = BorderStroke(7.dp, Blue),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier.height(64.dp)
-    ) {
-        Icon(icon, null, modifier = Modifier.size(32.dp))
-    }
-}
+       
