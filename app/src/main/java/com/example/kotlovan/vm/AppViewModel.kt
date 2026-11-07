@@ -24,10 +24,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var hasUnsavedChanges by mutableStateOf(false)
         private set
 
-    /** URI, в который пользователь последний раз сохранял массив/архив. */
-    var boundSaveUri by mutableStateOf<Uri?>(null)
-        private set
-
     var useAux by mutableStateOf(false)
     var photoModeActive by mutableStateOf(false)
 
@@ -51,16 +47,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         repo.loadAutosave()?.let { config = normalize(it) }
-        // Восстанавливаем boundSaveUri между запусками (если был)
-        val savedUriStr = app.getSharedPreferences("kotlovan_prefs", 0)
-            .getString("bound_save_uri", null)
-        if (savedUriStr != null) {
-            try {
-                val u = Uri.parse(savedUriStr)
-                // Проверяем, что разрешение всё ещё живо
-                if (repo.hasPersistablePermission(u)) boundSaveUri = u
-            } catch (_: Exception) {}
-        }
     }
 
     fun updateTheme(profile: com.example.kotlovan.data.ThemeProfile) {
@@ -78,7 +64,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newArray() {
         config = ArrayConfig()
-        boundSaveUri = null
         useAux = false; photoModeActive = false
         hasUnsavedChanges = true
     }
@@ -87,8 +72,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val fromZip = repo.loadFromZip(uri)
         if (fromZip != null) {
             config = normalize(fromZip)
-            boundSaveUri = uri
-            persistBoundUri(uri)
             useAux = false; photoModeActive = false
             pendingReconnect = emptyList()
             hasUnsavedChanges = false
@@ -96,7 +79,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         val fromJson = repo.loadFromUri(uri) ?: return false
         config = normalize(fromJson)
-        boundSaveUri = null
         useAux = false; photoModeActive = false
         pendingReconnect = emptyList()
         hasUnsavedChanges = false
@@ -119,63 +101,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Явное сохранение. Запоминает URI как boundSaveUri — далее
-     * любое изменение будет автосохраняться в этот файл.
+     * Явное сохранение в ZIP — вызывается ТОЛЬКО по кнопке
+     * («Сохранить массив» в builder, «Дискета» в карточке комментария,
+     * «Сохранить архив» в фоторежиме).
      */
     fun save(uri: Uri): Boolean {
         val finalConfig = repo.saveAsZip(config, uri) ?: return false
         config = finalConfig
-        boundSaveUri = uri
-        persistBoundUri(uri)
         hasUnsavedChanges = false
+        // Дублируем в SharedPreferences — на случай закрытия приложения
+        repo.autosave(config)
         return true
     }
 
     fun savePhotoArchive(uri: Uri): Boolean {
         val finalConfig = repo.saveAsZip(config, uri) ?: return false
         config = finalConfig
-        boundSaveUri = uri
-        persistBoundUri(uri)
         hasUnsavedChanges = false
-        return true
-    }
-
-    /**
-     * Немедленное сохранение в файл (если boundSaveUri задан)
-     * + всегда в SharedPreferences. Вызывается из UI после изменений
-     * и при выходе с экранов.
-     */
-    fun autosaveNow() {
-        // Всегда — в SharedPreferences
         repo.autosave(config)
-        // И в файл, если он был выбран
-        val uri = boundSaveUri
-        if (uri != null) {
-            try {
-                val finalConfig = repo.saveAsZip(config, uri)
-                if (finalConfig != null) {
-                    config = finalConfig
-                }
-            } catch (_: Throwable) {}
-        }
-        hasUnsavedChanges = false
+        return true
     }
 
     fun loadPhotoArchive(uri: Uri): Boolean {
         val loaded = repo.loadFromZip(uri) ?: return false
         config = normalize(loaded)
-        boundSaveUri = uri
-        persistBoundUri(uri)
         hasUnsavedChanges = false
         return true
-    }
-
-    private fun persistBoundUri(uri: Uri) {
-        try {
-            getApplication<Application>()
-                .getSharedPreferences("kotlovan_prefs", 0)
-                .edit().putString("bound_save_uri", uri.toString()).apply()
-        } catch (_: Exception) {}
     }
 
     fun generatePhotoReport(selectedPins: Set<String>, from: Long, to: Long, uri: Uri): Boolean {
@@ -198,6 +149,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return repo.generatePhotoReport(merged, selectedPins, from, to, uri)
     }
 
+    /** Только SharedPreferences, НЕ трогает ZIP. */
     fun autosave() { repo.autosave(config); hasUnsavedChanges = false }
 
     fun cell(r: Int, c: Int, d: Int = 0): CellData? {
@@ -333,7 +285,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
         }
         hasUnsavedChanges = true
-        autosave()
     }
 
     fun makeNested(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
@@ -470,7 +421,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         hasUnsavedChanges = true
-        autosave()
     }
 
     fun updateLastCell(r: Int, c: Int, d: Int = 0) {
