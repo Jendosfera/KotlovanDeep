@@ -53,13 +53,16 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
+    // Проверяем, есть ли сохраненный массив (в памяти из autosave)
+    val hasSavedArray = vm.config.main.cells.isNotEmpty() || vm.config.aux.cells.isNotEmpty()
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Фоновая текстура чертежной бумаги
         Image(
             painter = painterResource(id = R.drawable.blueprint_bg),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop // Заполняет весь экран
+            contentScale = ContentScale.Crop
         )
 
         // Контент меню поверх текстуры
@@ -77,6 +80,23 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(48.dp))
+
+            // Кнопка "Продолжить" (появляется, если есть сохраненный массив)
+            if (hasSavedArray) {
+                Button(
+                    onClick = { nav.navigate("viewer") },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ButtonYellow,
+                        contentColor = Color.Black
+                    ),
+                    border = BlackBorder,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().height(64.dp)
+                ) {
+                    Text("Продолжить", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(24.dp))
+            }
 
             Button(
                 onClick = { 
