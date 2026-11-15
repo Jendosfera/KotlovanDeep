@@ -60,7 +60,6 @@ import kotlin.math.abs
 import kotlin.math.min
 
 @Composable
-UnsavedMonitor(vm)
 fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     val ctx = LocalContext.current
     val cfg = vm.config
@@ -139,6 +138,8 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             visibleTitles = visibleTitles.filterValues { it > now }
         }
     }
+
+	UnsavedMonitor(vm)
 
     BoxWithConstraints(
         Modifier.fillMaxSize().background(Color.Black)
