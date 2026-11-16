@@ -1,11 +1,5 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.BuildConfig
-import com.example.kotlovan.vm.load
-import com.example.kotlovan.vm.reconnectImage
-import com.example.kotlovan.vm.clearPendingReconnect
-import com.example.kotlovan.vm.autosave
-import com.example.kotlovan.vm.newArray
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.kotlovan.BuildConfig // <-- ВАЖНО: импорт BuildConfig
 import com.example.kotlovan.R
 import com.example.kotlovan.vm.AppViewModel
 
@@ -102,7 +97,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         Image(
             painter = painterResource(id = R.drawable.blueprint_bg),
             contentDescription = "Фон чертежной бумаги",
-            contentScale = ContentScale.Crop, // Заполняет весь экран
+            contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -113,9 +108,8 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                 .padding(24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
-			
         ) {
-            // Заголовок (сделаем его белым с тенью, чтобы читался на синем фоне)
+            // Заголовок
             Text(
                 text = "Котлован",
                 fontSize = 48.sp,
@@ -131,7 +125,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             )
             Spacer(Modifier.height(48.dp))
 
-            // Если есть сохраненный массив — показываем кнопку "Продолжить"
             if (vm.config.main.cells.isNotEmpty() || vm.config.aux.cells.isNotEmpty()) {
                 BlueprintButton(
                     text = "Продолжить",
@@ -143,7 +136,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                 Spacer(Modifier.height(16.dp))
             }
 
-            // Кнопка "Создать массив"
             BlueprintButton(
                 text = "Создать массив",
                 onClick = {
@@ -153,7 +145,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             )
             Spacer(Modifier.height(16.dp))
 
-            // Кнопка "Загрузить массив"
             BlueprintButton(
                 text = "Загрузить массив",
                 onClick = { 
@@ -162,19 +153,22 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             )
             Spacer(Modifier.height(32.dp))
 
-            // Кнопка "Настроить вид"
             BlueprintButton(
                 text = "Настроить вид",
-                height = 56.dp, // Чуть меньше по высоте
+                height = 56.dp,
                 fontSize = 16.sp,
                 onClick = { nav.navigate("settings") }
             )
-			Text(
-				text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
-				fontSize = 12.sp,
-				color = Color.White.copy(alpha = 0.7f),
-				modifier = Modifier.padding(top = 16.dp)
-			)
+
+            Spacer(Modifier.weight(1f))
+
+            // Вывод версии приложения
+            Text(
+                text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 16.dp)
+            )
         }
     }
 
@@ -207,10 +201,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
     }
 }
 
-/**
- * Кастомная кнопка для главного меню.
- * Желтый фон, черная обводка 7dp, черный текст.
- */
 @Composable
 private fun BlueprintButton(
     text: String,
@@ -222,10 +212,10 @@ private fun BlueprintButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(height),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFFFFEB3B), // Желтый
-            contentColor = Color.Black          // Черный текст
+            containerColor = Color(0xFFFFEB3B),
+            contentColor = Color.Black
         ),
-        border = BorderStroke(7.dp, Color.Black), // Черная кайма 7dp
+        border = BorderStroke(7.dp, Color.Black),
         shape = RoundedCornerShape(8.dp),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 8.dp, 

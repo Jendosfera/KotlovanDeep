@@ -14,7 +14,7 @@ val gitCommitCount = try {
         commandLine("git", "rev-list", "--count", "HEAD")
     }.standardOutput.asText.get().trim().toInt()
 } catch (e: Exception) {
-    1 // fallback, если Git недоступен (например, при сборке из архива)
+    1 // fallback, если Git недоступен
 }
 
 // Формируем дату и время для versionName
@@ -34,6 +34,7 @@ android {
 
     buildFeatures { 
         compose = true 
+        buildConfig = true // <-- ВАЖНО: включает генерацию BuildConfig
     }
     composeOptions { 
         kotlinCompilerExtensionVersion = "1.5.8" 
