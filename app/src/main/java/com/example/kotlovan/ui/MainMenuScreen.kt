@@ -90,10 +90,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
         }
     }
 
-    // Основной контейнер
     Box(modifier = Modifier.fillMaxSize()) {
-        
-        // 1. Фоновая текстура чертежа
         Image(
             painter = painterResource(id = R.drawable.blueprint_bg),
             contentDescription = "Фон чертежной бумаги",
@@ -101,7 +98,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Интерфейс поверх фона
         Column(
             Modifier
                 .fillMaxSize()
@@ -109,7 +105,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Заголовок
             Text(
                 text = "Котлован",
                 fontSize = 48.sp,

@@ -65,7 +65,7 @@ dependencies {
     implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
 }
 
-// Принудительно фиксируем версию androidx.core, чтобы не тянулась 1.15.0
+// Принудительно фиксируем версию androidx.core
 configurations.all {
     resolutionStrategy {
         force("androidx.core:core:1.13.1")
