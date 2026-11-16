@@ -38,9 +38,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.example.kotlovan.BuildConfig // <-- ВАЖНО: импорт BuildConfig
+import com.example.kotlovan.BuildConfig
 import com.example.kotlovan.R
 import com.example.kotlovan.vm.AppViewModel
+// --- Необходимые импорты для extension-функций ---
+import com.example.kotlovan.vm.load
+import com.example.kotlovan.vm.reconnectImage
+import com.example.kotlovan.vm.clearPendingReconnect
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.newArray
 
 @Composable
 fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
@@ -157,7 +163,6 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
 
             Spacer(Modifier.weight(1f))
 
-            // Вывод версии приложения
             Text(
                 text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
                 fontSize = 12.sp,
