@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.BuildConfig
 import com.example.kotlovan.vm.load
 import com.example.kotlovan.vm.reconnectImage
 import com.example.kotlovan.vm.clearPendingReconnect
@@ -112,6 +113,7 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                 .padding(24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
+			
         ) {
             // Заголовок (сделаем его белым с тенью, чтобы читался на синем фоне)
             Text(
@@ -167,6 +169,12 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
                 fontSize = 16.sp,
                 onClick = { nav.navigate("settings") }
             )
+			Text(
+				text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
+				fontSize = 12.sp,
+				color = Color.White.copy(alpha = 0.7f),
+				modifier = Modifier.padding(top = 16.dp)
+			)
         }
     }
 

@@ -4,6 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
+val gitCommitCount = try {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.get().trim().toInt()
+} catch (e: Exception) {
+    1 // fallback, если Git недоступен
+}
+
+// Формируем версию: дата + время (или можно использовать gitCommitCount)
+val buildTimestamp = java.text.SimpleDateFormat("yyyyMMdd.HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+
 android {
     namespace = "com.example.kotlovan"
     compileSdk = 35
@@ -12,8 +23,8 @@ android {
         applicationId = "com.example.kotlovan"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitCommitCount
+        versionName = "1.0.$gitCommitCount ($buildTimestamp)"
     }
 
     buildFeatures { compose = true }
