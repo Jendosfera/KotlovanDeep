@@ -65,7 +65,7 @@ internal fun ViewerTopBar(
 ) {
     val cfg = vm.config
     Box(Modifier.fillMaxWidth()) {
-        // === Правый верхний угол: фонарик, фото, замок, меню ===
+        // === Правый верхний угол ===
         Row(
             Modifier.align(Alignment.TopEnd).padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -124,10 +124,7 @@ internal fun ViewerTopBar(
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Checkbox(
-                                        checked = currentCell?.ownPosition ?: false,
-                                        onCheckedChange = null
-                                    )
+                                    Checkbox(checked = currentCell?.ownPosition ?: false, onCheckedChange = null)
                                     Text("Свое положение")
                                 }
                             },
@@ -152,7 +149,7 @@ internal fun ViewerTopBar(
             }
         }
 
-        // === Левый верхний угол: назад + переключатель слоёв ===
+        // === Левый верхний угол ===
         Column(
             Modifier.align(Alignment.TopStart).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -162,7 +159,6 @@ internal fun ViewerTopBar(
                 icon = Icons.Default.ArrowBack, description = "Назад", iconModifier = iconMod
             )
             if (maxDepth > 0 && !inLinkMode) {
-                // Увеличенная кнопка переключения слоёв (56dp против 44dp)
                 Box(
                     Modifier
                         .size(56.dp)

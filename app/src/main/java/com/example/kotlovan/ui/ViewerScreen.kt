@@ -84,26 +84,28 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
-	
-	LaunchedEffect(Unit) {
-		if (vm.active.cell(row, col, depth) == null) {
-			val firstKey = vm.active.cells.keys.minByOrNull { k ->
-				val p = k.split(",")
-				val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
-				val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
-				r * 10000 + cc
-			}
-			if (firstKey != null) {
-				val p = firstKey.split(",")
-				row = p.getOrNull(0)?.toIntOrNull() ?: 0
-				col = p.getOrNull(1)?.toIntOrNull() ?: 0
-				depth = 0
-			} else {
-				row = 0; col = 0; depth = 0
-			}
-			savedRow = -1; savedCol = -1
-		}
-	}
+    
+    UnsavedMonitor(vm)
+
+    LaunchedEffect(Unit) {
+        if (vm.active.cell(row, col, depth) == null) {
+            val firstKey = vm.active.cells.keys.minByOrNull { k ->
+                val p = k.split(",")
+                val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
+                val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
+                r * 10000 + cc
+            }
+            if (firstKey != null) {
+                val p = firstKey.split(",")
+                row = p.getOrNull(0)?.toIntOrNull() ?: 0
+                col = p.getOrNull(1)?.toIntOrNull() ?: 0
+                depth = 0
+            } else {
+                row = 0; col = 0; depth = 0
+            }
+            savedRow = -1; savedCol = -1
+        }
+    }
 
     val inLinkMode = vm.linkReturn != null
 
@@ -138,8 +140,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             visibleTitles = visibleTitles.filterValues { it > now }
         }
     }
-
-	UnsavedMonitor(vm)
 
     BoxWithConstraints(
         Modifier.fillMaxSize().background(Color.Black)
@@ -196,6 +196,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             scale = lr.scale
             offsetX = lr.offX; offsetY = lr.offY
             vm.linkReturn = null
+            vm.updateLastCell(row, col, depth)
         }
 
         fun jumpToLink(link: PinLink, sourceRow: Int, sourceCol: Int, sourceId: String, keepReturn: Boolean = false) {
@@ -211,6 +212,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             row = link.row; col = link.col; depth = 0
             subMode = ViewerSubMode.VIEW
             pendingJump = PendingJump(link.x, link.y, link.scale)
+            vm.updateLastCell(row, col, depth)
         }
 
         LaunchedEffect(vm.pendingRejump) {
@@ -233,18 +235,17 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             }
             if (row == savedRow && col == savedCol) return@LaunchedEffect
             val c = vm.cell(row, col, depth)
-			if (c == null) {
-				// Ячейка исчезла — пробуем найти первую доступную
-				val firstKey = vm.active.cells.keys.minByOrNull { it }
-				if (firstKey != null) {
-					val parts = firstKey.split(",")
-					row = parts.getOrNull(0)?.toIntOrNull() ?: 0
-					col = parts.getOrNull(1)?.toIntOrNull() ?: 0
-					depth = 0
-					savedRow = -1; savedCol = -1
-				}
-				return@LaunchedEffect
-			}
+            if (c == null) {
+                val firstKey = vm.active.cells.keys.minByOrNull { it }
+                if (firstKey != null) {
+                    val parts = firstKey.split(",")
+                    row = parts.getOrNull(0)?.toIntOrNull() ?: 0
+                    col = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                    depth = 0
+                    savedRow = -1; savedCol = -1
+                }
+                return@LaunchedEffect
+            }
             val (s, vOx, vOy) = if (c.ownPosition) {
                 Triple(c.ownScale, c.ownOffsetX, c.ownOffsetY)
             } else {
@@ -353,6 +354,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                     persistViewport()
                                     swipeDir = dir
                                     row = nr; col = nc; depth = 0
+                                    vm.updateLastCell(nr, nc, 0) // Правило 4г: свайп меняет текущую ячейку
                                 }
                             }
                         },
@@ -367,25 +369,25 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                 else nav.navigate("comment/$hr/$hc/${pin.id}?depth=$depth")
                             }
                         },
-						onLongPress = { pos ->
-							if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
-							val cell = vm.cell(row, col, depth) ?: return@detectViewerGestures
-							val visible = cell.comments.filter { pin ->
-								val sx = pin.x * fitW * scale + offsetX
-								val sy = pin.y * fitH * scale + offsetY
-								sx in 0f..containerW && sy in 0f..containerH
-							}
-							val rowPins = if (showAllRow) {
-								val extra = mutableListOf<CommentPin>()
-								for (c in colRange) {
-									if (c == col) continue
-									val oc = vm.cell(row, c, 0) ?: continue
-									extra += oc.comments
-								}
-								visible + extra
-							} else visible
-							contextMenu = pos to rowPins
-						}
+                        onLongPress = { pos ->
+                            if (subMode != ViewerSubMode.VIEW) return@detectViewerGestures
+                            val cell = vm.cell(row, col, depth) ?: return@detectViewerGestures
+                            val visible = cell.comments.filter { pin ->
+                                val sx = pin.x * fitW * scale + offsetX
+                                val sy = pin.y * fitH * scale + offsetY
+                                sx in 0f..containerW && sy in 0f..containerH
+                            }
+                            val rowPins = if (showAllRow) {
+                                val extra = mutableListOf<CommentPin>()
+                                for (c in colRange) {
+                                    if (c == col) continue
+                                    val oc = vm.cell(row, c, 0) ?: continue
+                                    extra += oc.comments
+                                }
+                                visible + extra
+                            } else visible
+                            contextMenu = pos to rowPins
+                        }
                     )
                 }
         )
@@ -434,7 +436,9 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 onBack = {
                     if (inLinkMode) returnFromLink()
                     else {
-                        persistViewport(); vm.autosave()
+                        persistViewport()
+                        vm.updateLastCell(row, col, depth) // Сохраняем при выходе
+                        vm.autosave()
                         val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
                         if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
                     }
@@ -446,40 +450,44 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     val t = vm.active
                     row = t.lastRow; col = t.lastCol; depth = 0
                     pendingJump = null
+                    vm.updateLastCell(row, col, depth)
                 },
                 onToggleLayer = {
                     persistViewport()
-                    depth = if (depth >= maxDepth) 0 else depth + 1
+                    val newDepth = if (depth >= maxDepth) 0 else depth + 1
+                    depth = newDepth
                     savedRow = -1; savedCol = -1
                     pendingJump = null
+                    vm.updateLastCell(row, col, newDepth) // Правило 4г: смена слоя
                 },
-				onToggleArray = {
-					persistViewport()
-					val oldRow = row
-					val oldCol = col
-					vm.useAux = !vm.useAux
-					val t = vm.active
-					val target: Pair<Int, Int> = when {
-						t.cell(oldRow, oldCol, 0) != null -> oldRow to oldCol
-						t.cell(t.lastRow, t.lastCol, 0) != null -> t.lastRow to t.lastCol
-						t.cells.isNotEmpty() -> {
-							val firstKey = t.cells.keys.minByOrNull { k ->
-								val p = k.split(",")
-								val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
-								val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
-								r * 10000 + cc
-							}
-							if (firstKey != null) {
-								val p = firstKey.split(",")
-								(p.getOrNull(0)?.toIntOrNull() ?: 0) to (p.getOrNull(1)?.toIntOrNull() ?: 0)
-							} else 0 to 0
-						}
-						else -> 0 to 0
-					}
-					savedRow = -1; savedCol = -1
-					row = target.first; col = target.second; depth = 0
-					pendingJump = null
-				},
+                onToggleArray = {
+                    persistViewport()
+                    val oldRow = row
+                    val oldCol = col
+                    vm.useAux = !vm.useAux
+                    val t = vm.active
+                    val target: Pair<Int, Int> = when {
+                        t.cell(oldRow, oldCol, 0) != null -> oldRow to oldCol
+                        t.cell(t.lastRow, t.lastCol, 0) != null -> t.lastRow to t.lastCol
+                        t.cells.isNotEmpty() -> {
+                            val firstKey = t.cells.keys.minByOrNull { k ->
+                                val p = k.split(",")
+                                val r = p.getOrNull(0)?.toIntOrNull() ?: 9999
+                                val cc = p.getOrNull(1)?.toIntOrNull() ?: 9999
+                                r * 10000 + cc
+                            }
+                            if (firstKey != null) {
+                                val p = firstKey.split(",")
+                                (p.getOrNull(0)?.toIntOrNull() ?: 0) to (p.getOrNull(1)?.toIntOrNull() ?: 0)
+                            } else 0 to 0
+                        }
+                        else -> 0 to 0
+                    }
+                    savedRow = -1; savedCol = -1
+                    row = target.first; col = target.second; depth = 0
+                    pendingJump = null
+                    vm.updateLastCell(row, col, depth) // Правило 3а/4г: переключение массива
+                },
                 onMenuOpenToggle = { menuOpen = !menuOpen },
                 onMenuDismiss = { menuOpen = false },
                 onChangeLink = {
@@ -501,14 +509,9 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                 },
                 onPlaceComment = { subMode = ViewerSubMode.PLACE_COMMENT },
                 onSettings = { showSettings = true },
-				
-				onSaveArchive = {
-					saveArchiveLauncher.launch("Общий архив.zip")
-				},
-				onLoadArchive = {
-					openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-				},
-				onOpenReport = { nav.navigate("photoreport") }				
+                onSaveArchive = { saveArchiveLauncher.launch("Общий архив.zip") },
+                onLoadArchive = { openArchiveLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                onOpenReport = { nav.navigate("photoreport") }
             )
 
             if (subMode == ViewerSubMode.VIEW && !inLinkMode) {
@@ -520,8 +523,16 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     colRange = colRange,
                     showAllRow = showAllRow,
                     baseIconDp = baseIconDp,
-                    onRowClick = { r -> persistViewport(); row = r; depth = 0 },
-                    onColClick = { c -> persistViewport(); col = c; depth = 0 },
+                    onRowClick = { r -> 
+                        persistViewport()
+                        row = r; depth = 0 
+                        vm.updateLastCell(r, col, 0) // Правило 4г: нажатие на строку
+                    },
+                    onColClick = { c -> 
+                        persistViewport()
+                        col = c; depth = 0 
+                        vm.updateLastCell(row, c, 0) // Правило 4г: нажатие на столбец
+                    },
                     onRowLong = { r -> labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" },
                     onColLong = { c -> labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" },
                     onToggleAllRow = { showAllRow = !showAllRow }
@@ -582,17 +593,15 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
         // Контекстное меню
         contextMenu?.let { (pos, pins) ->
-			contextMenu?.let { (pos, pins) ->
-				ViewerContextMenu(
-					pos = pos,
-					pins = pins,
-					onClose = { contextMenu = null },
-					onPinClick = { pin ->
-						nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
-						contextMenu = null
-					}
-				)
-			}
+            ViewerContextMenu(
+                pos = pos,
+                pins = pins,
+                onClose = { contextMenu = null },
+                onPinClick = { pin ->
+                    nav.navigate("comment/$row/$col/${pin.id}?depth=$depth")
+                    contextMenu = null
+                }
+            )
         }
 
         if (showSettings && !iconsHidden) {
@@ -629,6 +638,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
 
     DisposableEffect(Unit) {
         onDispose {
+            vm.updateLastCell(row, col, depth)
             vm.linkReturn = null
             vm.pendingRejump = null
             vm.autosave()
