@@ -1,8 +1,5 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.vm.updateLastCell
-import com.example.kotlovan.vm.moveTail
-import com.example.kotlovan.vm.makeNested
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import com.example.kotlovan.vm.AppViewModel
+import com.example.kotlovan.vm.makeNested
+import com.example.kotlovan.vm.moveTail
+import com.example.kotlovan.vm.swapCells
+import com.example.kotlovan.vm.updateLastCell
 
 @Composable
 internal fun ArrayBuilderGrid(
@@ -33,6 +34,8 @@ internal fun ArrayBuilderGrid(
     step: Float, coords: Set<Pair<Int, Int>>,
     localCurrent: Triple<Int, Int, Int>?,
     onLocalCurrentChange: (Triple<Int, Int, Int>?) -> Unit,
+    isMergeMode: Boolean,
+    onMergeModeChange: (Boolean) -> Unit,
     longPressMode: Boolean,
     selectedForSwap: Triple<Int, Int, Int>?,
     onSelectedForSwapChange: (Triple<Int, Int, Int>?) -> Unit,
@@ -65,9 +68,11 @@ internal fun ArrayBuilderGrid(
 
                 for ((d, cell) in sorted) {
                     if (!isExpanded && d > 2) continue
+                    
                     val isSel = localCurrent?.let {
                         it.first == r && it.second == c && it.third == d
                     } == true
+                    
                     val isSwap = longPressMode && selectedForSwap != null &&
                             !(selectedForSwap.first == r &&
                                     selectedForSwap.second == c &&
@@ -106,7 +111,15 @@ internal fun ArrayBuilderGrid(
                                     vm.makeNested(selR, selC, selD, r, c)
                                     nav.popBackStack()
                                 }
+                            } else if (isMergeMode) {
+                                // Режим слияния: вкладываем текущую в эту
+                                val current = localCurrent
+                                if (current != null && !(r == current.first && c == current.second && d == current.third)) {
+                                    vm.makeNested(current.first, current.second, current.third, r, c)
+                                    onMergeModeChange(false)
+                                }
                             } else if (longPressMode) {
+                                // Режим переноса (обмен): меняем местами
                                 val s = selectedForSwap
                                 if (s == null) {
                                     onSelectedForSwapChange(Triple(r, c, d))
@@ -114,28 +127,28 @@ internal fun ArrayBuilderGrid(
                                     if (s.first == r && s.second == c && s.third == d) {
                                         onSelectedForSwapChange(null)
                                     } else {
-                                        vm.moveTail(s.first, s.second, s.third, r, c)
+                                        vm.swapCells(s.first, s.second, s.third, r, c, d)
                                         onSelectedForSwapChange(null)
                                         onLongPressModeChange(false)
                                     }
                                 }
                             } else {
-                                // Правило 4а: ячейка становится текущей при нажатии
+                                // Обычный клик: делаем ячейку текущей
                                 onLocalCurrentChange(Triple(r, c, d))
                                 vm.updateLastCell(r, c, d) 
                             }
                         },
                         onDoubleTap = {
-                            if (!isSelectMode && !isUnnestMode && !longPressMode) {
+                            if (!isSelectMode && !isUnnestMode && !longPressMode && !isMergeMode) {
                                 vm.updateLastCell(r, c, d)
                                 nav.navigate("card/$r/$c?depth=$d")
                             }
                         },
                         onLongPress = {
-                            if (!isSelectMode && !isUnnestMode) {
+                            if (!isSelectMode && !isUnnestMode && !isMergeMode) {
                                 onLongPressModeChange(true)
                                 onSelectedForSwapChange(Triple(r, c, d))
-                                Toast.makeText(ctx, "Выберите ячейку для переноса", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(ctx, "Выберите ячейку для обмена", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier
@@ -173,8 +186,13 @@ internal fun ArrayBuilderGrid(
                         if (isUnnestMode) {
                             vm.moveTail(unR, unC, unD, r, c)
                             nav.popBackStack()
-                        } else if (isSelectMode) { /* нельзя */ }
-                        else if (longPressMode && selectedForSwap != null) {
+                        } else if (isSelectMode) { 
+                            // нельзя
+                        } else if (isMergeMode) {
+                            // Нельзя вложить в пустоту, просто отменяем режим
+                            onMergeModeChange(false)
+                        } else if (longPressMode && selectedForSwap != null) {
+                            // Перемещение в пустую ячейку
                             val s = selectedForSwap
                             vm.moveTail(s.first, s.second, s.third, r, c)
                             onSelectedForSwapChange(null)

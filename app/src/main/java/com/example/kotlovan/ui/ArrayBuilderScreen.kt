@@ -1,8 +1,5 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.vm.save
-import com.example.kotlovan.vm.updateLastCell
-import com.example.kotlovan.vm.autosave
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,6 +41,10 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.save
+import com.example.kotlovan.vm.setBuilderScale
+import com.example.kotlovan.vm.updateLastCell
 
 @Composable
 fun ArrayBuilderScreen(
@@ -55,9 +56,12 @@ fun ArrayBuilderScreen(
 
     LaunchedEffect(aux) { vm.useAux = aux }
 
-    var scale by remember(aux) { mutableStateOf(1f) }
+    // Инициализируем зум из ViewModel (уникальный для каждого массива)
+    var scale by remember(aux) { mutableStateOf(vm.active.builderScale) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }
+    
     var longPressMode by remember { mutableStateOf(false) }
+    var isMergeMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
     var showNameDialog by remember { mutableStateOf(false) }
     var fileName by remember { mutableStateOf("array.zip") }
@@ -103,15 +107,21 @@ fun ArrayBuilderScreen(
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
         val step = cellSizePx + cellGapPx
 
-        // Правило 3: центрирование по текущей ячейке
+        // Правило 3: Центрирование текущей ячейки с учетом масштаба
         LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol, vm.active.lastDepth) {
             val key = "${vm.active.lastRow},${vm.active.lastCol},${vm.active.lastDepth}"
             if (centeredOnKey == key) return@LaunchedEffect
             centeredOnKey = key
+            
+            val newScale = vm.active.builderScale
+            scale = newScale
+            
             localCurrent = Triple(vm.active.lastRow, vm.active.lastCol, vm.active.lastDepth)
             val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
             val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
-            offset = Offset(containerW / 2f - cx, containerH / 2f - cy)
+            
+            // ВАЖНО: умножаем на newScale, иначе при зуме центр будет улетать
+            offset = Offset(containerW / 2f - cx * newScale, containerH / 2f - cy * newScale)
         }
 
         Box(
@@ -121,7 +131,11 @@ fun ArrayBuilderScreen(
                         getViewport = { Viewport(scale, offset) },
                         fitW = 0f, fitH = 0f,
                         containerW = containerW, containerH = containerH,
-                        onTransform = { vp -> scale = vp.scale; offset = vp.offset },
+                        onTransform = { vp -> 
+                            scale = vp.scale
+                            offset = vp.offset
+                            vm.setBuilderScale(vp.scale) // Сохраняем зум
+                        },
                         onSwipe = { _, _ -> },
                         minScale = 0.2f, maxScale = 5f,
                         alwaysPanOneFinger = true
@@ -141,6 +155,8 @@ fun ArrayBuilderScreen(
                     step = step, coords = coords,
                     localCurrent = localCurrent,
                     onLocalCurrentChange = { localCurrent = it },
+                    isMergeMode = isMergeMode,
+                    onMergeModeChange = { isMergeMode = it },
                     longPressMode = longPressMode,
                     selectedForSwap = selectedForSwap,
                     onSelectedForSwapChange = { selectedForSwap = it },
@@ -162,18 +178,27 @@ fun ArrayBuilderScreen(
         if (selectForNested.isEmpty() && selectForUnnest.isEmpty()) {
             ArrayBuilderTopBar(
                 aux = aux,
+                isMergeMode = isMergeMode,
                 onBack = { 
-                    // Сохраняем текущую ячейку перед выходом
                     localCurrent?.let { vm.updateLastCell(it.first, it.second, it.third) }
+                    vm.setBuilderScale(scale)
                     vm.autosave(); nav.popBackStack() 
                 },
                 onToggleArray = {
                     localCurrent?.let { vm.updateLastCell(it.first, it.second, it.third) }
+                    vm.setBuilderScale(scale)
+                    isMergeMode = false
+                    longPressMode = false
                     if (aux) nav.navigate("builder?aux=false") {
                         popUpTo("builder?aux=true") { inclusive = true }
                     } else nav.navigate("builder?aux=true")
                 },
-                onRating = { nav.navigate("rating") }
+                onRating = { nav.navigate("rating") },
+                onMergeClick = {
+                    isMergeMode = !isMergeMode
+                    longPressMode = false
+                    selectedForSwap = null
+                }
             )
         }
 
@@ -197,18 +222,19 @@ fun ArrayBuilderScreen(
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) { Text("Отменить отделение") }
             } else {
-                if (longPressMode) {
+                if (longPressMode || isMergeMode) {
                     Button(
-                        onClick = { longPressMode = false; selectedForSwap = null },
+                        onClick = { longPressMode = false; selectedForSwap = null; isMergeMode = false },
                         border = BorderStroke(7.dp, Color.Black),
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
-                    ) { Text("Отменить перенос") }
+                    ) { Text(if (isMergeMode) "Отменить слияние" else "Отменить перенос") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
                             if (vm.active.cells.isNotEmpty()) {
                                 localCurrent?.let { vm.updateLastCell(it.first, it.second, it.third) }
+                                vm.setBuilderScale(scale)
                                 vm.autosave(); nav.navigate("viewer")
                             }
                         },
@@ -258,6 +284,7 @@ fun ArrayBuilderScreen(
     DisposableEffect(Unit) { 
         onDispose { 
             localCurrent?.let { vm.updateLastCell(it.first, it.second, it.third) }
+            vm.setBuilderScale(scale)
             vm.autosave() 
         } 
     }

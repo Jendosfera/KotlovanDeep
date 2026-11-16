@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Star
@@ -28,9 +29,11 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun BoxScope.ArrayBuilderTopBar(
     aux: Boolean,
+    isMergeMode: Boolean,
     onBack: () -> Unit,
     onToggleArray: () -> Unit,
-    onRating: () -> Unit
+    onRating: () -> Unit,
+    onMergeClick: () -> Unit
 ) {
     Row(
         Modifier.fillMaxWidth().padding(8.dp),
@@ -42,7 +45,21 @@ internal fun BoxScope.ArrayBuilderTopBar(
                 .clickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.ArrowBack, "Назад", tint = Blue) }
+        
         Spacer(Modifier.weight(1f))
+        
+        // Кнопка Слияния (подсвечивается зеленым, если режим включен)
+        Box(
+            Modifier.size(44.dp).clip(CircleShape)
+                .background(if (isMergeMode) Color(0xFF4CAF50) else Yellow)
+                .border(7.dp, Color.Black, CircleShape)
+                .clickable(onClick = onMergeClick),
+            contentAlignment = Alignment.Center
+        ) { 
+            Icon(Icons.Default.CallMerge, "Слияние", tint = if (isMergeMode) Color.White else Blue) 
+        }
+        Spacer(Modifier.width(4.dp))
+        
         Box(
             Modifier.size(44.dp).clip(CircleShape)
                 .background(Yellow).border(7.dp, Color.Black, CircleShape)
@@ -50,6 +67,7 @@ internal fun BoxScope.ArrayBuilderTopBar(
             contentAlignment = Alignment.Center
         ) { Icon(if (aux) Icons.Default.LockOpen else Icons.Default.Lock, "Массив", tint = Blue) }
         Spacer(Modifier.width(4.dp))
+        
         Box(
             Modifier.size(44.dp).clip(CircleShape)
                 .background(Yellow).border(7.dp, Color.Black, CircleShape)

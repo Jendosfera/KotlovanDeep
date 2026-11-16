@@ -56,7 +56,7 @@ data class CellData(
     val ownScale: Float = 1f,
     val ownOffsetX: Float = 0f,
     val ownOffsetY: Float = 0f,
-	val nestedLevelLabels: Map<Int, String> = emptyMap()
+    val nestedLevelLabels: Map<Int, String> = emptyMap()
 )
 
 @Serializable
@@ -69,7 +69,8 @@ data class SubArray(
     val lastCol: Int = 0,
     val lastDepth: Int = 0,
     val rowLabels: Map<Int, String> = emptyMap(),
-    val colLabels: Map<Int, String> = emptyMap()
+    val colLabels: Map<Int, String> = emptyMap(),
+    val builderScale: Float = 1f // <-- НОВОЕ: зум для экрана создания массива
 ) {
     fun key(r: Int, c: Int, d: Int = 0) = "$r,$c,$d"
     fun cell(r: Int, c: Int, d: Int = 0): CellData? = cells[key(r, c, d)]
@@ -122,6 +123,7 @@ data class ArrayConfig(
     val iconSize: Float = 1f,
     val iconOpacity: Float = 1f
 )
+
 @Serializable
 data class LinkReturnState(
     val isAux: Boolean,

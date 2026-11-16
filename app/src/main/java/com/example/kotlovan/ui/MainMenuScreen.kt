@@ -41,7 +41,6 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.BuildConfig
 import com.example.kotlovan.R
 import com.example.kotlovan.vm.AppViewModel
-// --- Необходимые импорты для extension-функций ---
 import com.example.kotlovan.vm.load
 import com.example.kotlovan.vm.reconnectImage
 import com.example.kotlovan.vm.clearPendingReconnect
@@ -163,10 +162,12 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
 
             Spacer(Modifier.weight(1f))
 
+            // Вывод версии приложения (сделан крупнее и черным)
             Text(
                 text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 16.sp, // Увеличили размер с 12.sp до 16.sp
+                fontWeight = FontWeight.Medium,
+                color = Color.Black, // Изменили цвет на черный
                 modifier = Modifier.padding(top = 16.dp)
             )
         }

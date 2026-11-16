@@ -5,6 +5,13 @@ import androidx.compose.runtime.setValue
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.CommentPin
 
+fun AppViewModel.setBuilderScale(scale: Float) {
+    config = when {
+        useAux -> config.copy(aux = config.aux.copy(builderScale = scale))
+        else -> config.copy(main = config.main.copy(builderScale = scale))
+    }
+}
+
 fun AppViewModel.upsertCell(r: Int, c: Int, data: CellData, d: Int = 0) {
     val commentsToRestore = if (photoModeActive) data.comments else emptyList()
     val cleanData = if (photoModeActive) data.copy(comments = emptyList()) else data
@@ -82,7 +89,6 @@ fun AppViewModel.swapCells(r1: Int, c1: Int, d1: Int, r2: Int, c2: Int, d2: Int)
         else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
     }
     
-    // Правило 4б: цель обмена становится текущей
     updateLastCell(r2, c2, d2) 
     markChanged()
 }
@@ -128,7 +134,6 @@ fun AppViewModel.moveTail(sr: Int, sc: Int, sd: Int, tr: Int, tc: Int) {
         else -> config.copy(main = config.main.copy(cells = map), photoComments = pc)
     }
     
-    // Правило 4в: вложенная ячейка по новым координатам становится текущей
     updateLastCell(tr, tc, newBase) 
     markChanged()
 }
