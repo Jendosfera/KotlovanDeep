@@ -1,19 +1,24 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
 }
 
+// Получаем количество коммитов для versionCode (если Git есть)
 val gitCommitCount = try {
     providers.exec {
         commandLine("git", "rev-list", "--count", "HEAD")
     }.standardOutput.asText.get().trim().toInt()
 } catch (e: Exception) {
-    1 // fallback, если Git недоступен
+    1 // fallback, если Git недоступен (например, при сборке из архива)
 }
 
-// Формируем версию: дата + время (или можно использовать gitCommitCount)
-val buildTimestamp = java.text.SimpleDateFormat("yyyyMMdd.HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+// Формируем дату и время для versionName
+val buildTimestamp = SimpleDateFormat("yyyyMMdd.HHmm", Locale.getDefault()).format(Date())
 
 android {
     namespace = "com.example.kotlovan"
@@ -27,14 +32,20 @@ android {
         versionName = "1.0.$gitCommitCount ($buildTimestamp)"
     }
 
-    buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
+    buildFeatures { 
+        compose = true 
+    }
+    composeOptions { 
+        kotlinCompilerExtensionVersion = "1.5.8" 
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions { 
+        jvmTarget = "17" 
+    }
 }
 
 dependencies {
@@ -50,8 +61,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     implementation("io.coil-kt:coil-compose:2.7.0")
-	implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
-
+    implementation("io.github.panpf.zoomimage:zoomimage-compose-coil2:1.2.0")
 }
 
 // Принудительно фиксируем версию androidx.core, чтобы не тянулась 1.15.0
