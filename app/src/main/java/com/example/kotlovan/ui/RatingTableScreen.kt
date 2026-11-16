@@ -1,5 +1,7 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.updatePin
+import com.example.kotlovan.vm.autosave
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures

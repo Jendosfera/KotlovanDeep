@@ -1,5 +1,6 @@
 package com.example.kotlovan.vm
 
+import com.example.kotlovan.vm.updateCell
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.example.kotlovan.data.CommentPin

@@ -1,5 +1,8 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.updateLastCell
+import com.example.kotlovan.vm.moveTail
+import com.example.kotlovan.vm.makeNested
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

@@ -1,5 +1,11 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.updatePin
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.onUserSave
+import com.example.kotlovan.vm.saveCurrentUri
+import com.example.kotlovan.vm.movePinBetweenStores
+import com.example.kotlovan.vm.deletePin
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast

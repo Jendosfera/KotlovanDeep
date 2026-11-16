@@ -1,5 +1,10 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.removeCell
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.upsertCell
+import com.example.kotlovan.vm.updateLastCell
+import com.example.kotlovan.vm.updateCell
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke

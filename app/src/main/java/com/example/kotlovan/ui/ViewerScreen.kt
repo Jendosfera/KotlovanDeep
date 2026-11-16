@@ -1,5 +1,15 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.savePhotoArchive
+import com.example.kotlovan.vm.loadPhotoArchive
+import com.example.kotlovan.vm.updateCell
+import com.example.kotlovan.vm.setGlobalViewport
+import com.example.kotlovan.vm.updateLastCell
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.setComments
+import com.example.kotlovan.vm.setIconSettings
+import com.example.kotlovan.vm.setRowLabel
+import com.example.kotlovan.vm.setColLabel
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts

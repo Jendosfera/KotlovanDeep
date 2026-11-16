@@ -1,5 +1,10 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.load
+import com.example.kotlovan.vm.reconnectImage
+import com.example.kotlovan.vm.clearPendingReconnect
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.newArray
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts

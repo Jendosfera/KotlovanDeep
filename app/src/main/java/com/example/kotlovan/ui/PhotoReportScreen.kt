@@ -1,5 +1,6 @@
 package com.example.kotlovan.ui
 
+import com.example.kotlovan.vm.generatePhotoReport
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
