@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.max
@@ -45,9 +46,10 @@ fun ZoomableRegionImage(
     var decoder by remember(file) { mutableStateOf<BitmapRegionDecoder?>(null) }
     
     // Кэш тайлов: Ключ -> Данные (битмап + его координаты в оригинале)
+    // Кэш хранится, пока не сменится файл
     var tiles by remember(file) { mutableStateOf<Map<Long, TileData>>(emptyMap()) }
 
-    // 1. Загрузка базовой картинки (для сильного отдаления)
+    // 1. Загрузка базовой картинки (для отображения при отсутствии тайлов)
     LaunchedEffect(file) {
         baseBitmap = withContext(Dispatchers.IO) { decodeSubsampled(file, 2048) }
         decoder = withContext(Dispatchers.IO) {
@@ -56,18 +58,16 @@ fun ZoomableRegionImage(
         }
     }
 
-    // 2. Умная загрузка тайлов (от центра)
+    // 2. Умная загрузка тайлов (от центра, с дебаунсом)
     LaunchedEffect(
         file, scale, offsetX, offsetY, fitW, fitH, containerW, containerH, decoder
     ) {
         val dec = decoder ?: return@LaunchedEffect
         
-        // Если отдалили очень сильно, тайлы не нужны — используем baseBitmap
+        // Дебаунс: ждем 50мс, чтобы не грузить тайлы во время активного жеста
+        delay(50)
+
         if (!scale.isFinite() || scale < 1.2f || imageW <= 0 || imageH <= 0) {
-            if (tiles.isNotEmpty()) {
-                tiles.values.forEach { it.bitmap.recycle() }
-                tiles = emptyMap()
-            }
             return@LaunchedEffect
         }
         
@@ -86,7 +86,6 @@ fun ZoomableRegionImage(
         val visRight = ((containerW - offsetX) * invScale).coerceIn(0f, imageW.toFloat())
         val visBottom = ((containerH - offsetY) * invScale).coerceIn(0f, imageH.toFloat())
 
-        // Если видимая область вырождена или за пределами картинки
         if (visRight <= visLeft || visBottom <= visTop) return@LaunchedEffect
 
         // 2. Добавляем запас (2 тайла со всех сторон), чтобы при панорамировании не было белых дыр
@@ -119,17 +118,7 @@ fun ZoomableRegionImage(
 
         // 5. Загружаем недостающие тайлы
         val newCache = tiles.toMutableMap()
-        var cacheChanged = false
         
-        // Сначала удаляем тайлы, которые больше не нужны (экономия RAM)
-        val neededKeys = neededTiles.map { (x, y) -> getTileKey(x, y) }.toSet()
-        val keysToRemove = newCache.keys.filter { it !in neededKeys }
-        for (key in keysToRemove) {
-            newCache.remove(key)?.bitmap?.recycle()
-            cacheChanged = true
-        }
-
-        // Затем догружаем новые (начиная с самых близких к центру)
         for ((x, y) in neededTiles) {
             val key = getTileKey(x, y)
             if (newCache.containsKey(key)) continue // уже в памяти
@@ -145,13 +134,8 @@ fun ZoomableRegionImage(
             
             if (bmp != null) {
                 newCache[key] = TileData(bmp, rect)
-                // Обновляем стейт после каждого тайла, чтобы UI оживал инкрементально
-                tiles = newCache.toMap()
+                tiles = newCache.toMap() // Обновляем стейт для мгновенной отрисовки
             }
-        }
-        
-        if (cacheChanged) {
-            tiles = newCache.toMap()
         }
     }
 
@@ -160,54 +144,51 @@ fun ZoomableRegionImage(
         drawIntoCanvas { canvas ->
             val native = canvas.nativeCanvas
 
-            // Если сильно отдалили — рисуем размытую базовую картинку
-            if (scale < 1.2f) {
-                val base = baseBitmap
-                if (base != null) {
+            // Всегда рисуем базовую картинку (размытую), чтобы не было черного экрана
+            val base = baseBitmap
+            if (base != null) {
+                try {
+                    native.save()
+                    native.translate(offsetX, offsetY)
+                    native.scale(scale, scale)
+                    native.drawBitmap(base, null, Rect(0, 0, fitW.roundToInt(), fitH.roundToInt()), null)
+                    native.restore()
+                } catch (_: Throwable) {}
+            }
+
+            // Рисуем тайлы поверх базовой картинки
+            val currentFitScale = if (imageW > 0) fitW / imageW else 1f
+            val currentScale = currentFitScale * scale
+            
+            for (tile in tiles.values) {
+                val screenLeft = offsetX + tile.rect.left * currentScale
+                val screenTop = offsetY + tile.rect.top * currentScale
+                val screenW = tile.rect.width() * currentScale
+                val screenH = tile.rect.height() * currentScale
+                
+                // Отсечение невидимых тайлов
+                if (screenLeft + screenW < 0 || screenLeft > containerW || 
+                    screenTop + screenH < 0 || screenTop > containerH) continue
+
+                if (tile.bitmap.width > 0 && tile.bitmap.height > 0 &&
+                    screenW.isFinite() && screenH.isFinite()) {
                     try {
                         native.save()
-                        native.translate(offsetX, offsetY)
-                        native.scale(scale, scale)
-                        native.drawBitmap(base, null, Rect(0, 0, fitW.roundToInt(), fitH.roundToInt()), null)
+                        native.translate(screenLeft, screenTop)
+                        native.scale(screenW / tile.bitmap.width, screenH / tile.bitmap.height)
+                        native.drawBitmap(tile.bitmap, 0f, 0f, null)
                         native.restore()
                     } catch (_: Throwable) {}
-                }
-            } else {
-                // Рисуем тайлы
-                val currentFitScale = if (imageW > 0) fitW / imageW else 1f
-                val currentScale = currentFitScale * scale
-                
-                for (tile in tiles.values) {
-                    val screenLeft = offsetX + tile.rect.left * currentScale
-                    val screenTop = offsetY + tile.rect.top * currentScale
-                    val screenW = tile.rect.width() * currentScale
-                    val screenH = tile.rect.height() * currentScale
-                    
-                    // Отсечение невидимых тайлов (Culling)
-                    if (screenLeft + screenW < 0 || screenLeft > containerW || 
-                        screenTop + screenH < 0 || screenTop > containerH) continue
-
-                    if (tile.bitmap.width > 0 && tile.bitmap.height > 0 &&
-                        screenW.isFinite() && screenH.isFinite()) {
-                        try {
-                            native.save()
-                            native.translate(screenLeft, screenTop)
-                            native.scale(screenW / tile.bitmap.width, screenH / tile.bitmap.height)
-                            native.drawBitmap(tile.bitmap, 0f, 0f, null)
-                            native.restore()
-                        } catch (_: Throwable) {}
-                    }
                 }
             }
         }
     }
 
-    // Очистка памяти при уничтожении
+    // Очистка памяти при смене файла или закрытии экрана
     DisposableEffect(file) {
         onDispose {
             try { baseBitmap?.recycle() } catch (_: Throwable) {}
             tiles.values.forEach { try { it.bitmap.recycle() } catch (_: Throwable) {} }
-            // НЕ вызываем decoder.recycle() — native-крэш при параллельном decodeRegion
             decoder = null
         }
     }
