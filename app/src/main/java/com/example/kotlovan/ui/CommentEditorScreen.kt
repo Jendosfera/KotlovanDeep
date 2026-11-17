@@ -110,6 +110,14 @@ fun CommentEditorScreen(
     var editPhoto by remember { mutableStateOf<CommentPhoto?>(null) }
     var pendingPhotoName by remember { mutableStateOf<String?>(null) }
 
+    // Синхронизация локального стейта photos с конфигом (на случай дедупликации)
+    val currentPhotos = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id }?.photos ?: emptyList()
+    LaunchedEffect(currentPhotos) {
+        if (currentPhotos != photos) {
+            photos = currentPhotos
+        }
+    }
+
     fun applyToMemory() {
         val curPin = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id } ?: return
         vm.updatePin(row, col, depth, curPin.copy(
@@ -131,7 +139,6 @@ fun CommentEditorScreen(
         }
     }
 
-    // SAF лончер для сохранения. Сохранение в фоне.
     val zipSaver = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
@@ -144,8 +151,16 @@ fun CommentEditorScreen(
             scope.launch(Dispatchers.IO) {
                 val success = vm.onUserSave(uri)
                 withContext(Dispatchers.Main) {
-                    if (success) Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-                    else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+                    if (success) {
+                        Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+                        // Обновляем локальный стейт после дедупликации
+                        val updatedPin = vm.cell(row, col, depth)?.comments?.firstOrNull { it.id == id }
+                        if (updatedPin != null) {
+                            photos = updatedPin.photos
+                        }
+                    } else {
+                        Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -154,7 +169,6 @@ fun CommentEditorScreen(
     fun saveWithZip() {
         applyToMemory()
         vm.autosave()
-        // Всегда открываем SAF, название предложит система
         zipSaver.launch("array.zip")
     }
 

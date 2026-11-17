@@ -56,7 +56,10 @@ fun ArrayBuilderScreen(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(aux) { vm.useAux = aux }
+    // Синхронно обновляем состояние, чтобы coords и bounds ниже считались для правильного массива
+    if (vm.useAux != aux) {
+        vm.useAux = aux
+    }
 
     var scale by remember(aux) { mutableStateOf(vm.active.builderScale) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }
@@ -82,7 +85,6 @@ fun ArrayBuilderScreen(
                 )
             } catch (_: Exception) {}
             
-            // Сохранение в фоновом потоке, чтобы не вешать UI
             scope.launch(Dispatchers.IO) {
                 val success = vm.save(uri)
                 withContext(Dispatchers.Main) {
@@ -113,10 +115,12 @@ fun ArrayBuilderScreen(
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
         val step = cellSizePx + cellGapPx
 
-        LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol, vm.active.lastDepth) {
-            val key = "${vm.active.lastRow},${vm.active.lastCol},${vm.active.lastDepth}"
-            if (centeredOnKey == key) return@LaunchedEffect
-            centeredOnKey = key
+        // ВАЖНО: В ключ добавлены cFrom и rFrom, чтобы пересчитывать offset при изменении границ массива
+        val centerKey = "${vm.active.lastRow},${vm.active.lastCol},${vm.active.lastDepth},$cFrom,$rFrom,$aux"
+
+        LaunchedEffect(centerKey) {
+            if (centeredOnKey == centerKey) return@LaunchedEffect
+            centeredOnKey = centerKey
             
             val newScale = vm.active.builderScale
             scale = newScale
@@ -125,6 +129,7 @@ fun ArrayBuilderScreen(
             val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
             val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
             
+            // Центрирование текущей ячейки
             offset = Offset(containerW / 2f - cx * newScale, containerH / 2f - cy * newScale)
         }
 
@@ -250,7 +255,7 @@ fun ArrayBuilderScreen(
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) { Text("Просмотр") }
                     Button(
-                        onClick = { saveLauncher.launch("array.zip") }, // Прямой вызов SAF без диалога
+                        onClick = { saveLauncher.launch("array.zip") },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4CAF50), contentColor = Color.White
                         ),

@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,11 +42,11 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.BuildConfig
 import com.example.kotlovan.R
 import com.example.kotlovan.vm.AppViewModel
-import com.example.kotlovan.vm.load
-import com.example.kotlovan.vm.reconnectImage
-import com.example.kotlovan.vm.clearPendingReconnect
 import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.clearPendingReconnect
+import com.example.kotlovan.vm.load
 import com.example.kotlovan.vm.newArray
+import com.example.kotlovan.vm.reconnectImage
 
 @Composable
 fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
@@ -162,13 +163,16 @@ fun MainMenuScreen(nav: NavHostController, vm: AppViewModel) {
 
             Spacer(Modifier.weight(1f))
 
-            // Вывод версии приложения (сделан крупнее и черным)
+            // Версия на светлой полоске
             Text(
                 text = "Версия ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})",
-                fontSize = 16.sp, // Увеличили размер с 12.sp до 16.sp
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.Black, // Изменили цвет на черный
-                modifier = Modifier.padding(top = 16.dp)
+                color = Color.Black,
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }
     }
