@@ -8,30 +8,14 @@ import com.example.kotlovan.data.ArrayConfig
 import com.example.kotlovan.data.CellData
 import com.example.kotlovan.data.SubArray
 
-fun AppViewModel.tickUnsavedMonitor() {
-    if (!hasUnsavedChanges) return
-    val now = System.currentTimeMillis()
-    val firstDelta = if (firstUnsavedTime > 0) now - firstUnsavedTime else 0L
-    val lastDelta = if (lastChangeTime > 0) now - lastChangeTime else 0L
-
-    showUnsavedBanner = firstDelta > unsavedThresholdMs
-
-    if (lastDelta > unsavedThresholdMs && firstDelta > unsavedThresholdMs) {
-        saveCurrentUri()
-    }
+// Функции markChanged / markSaved больше не нужны для автосохранения, но оставлены для совместимости
+fun AppViewModel.markChanged() {
+    hasUnsavedChanges = true
 }
 
-fun AppViewModel.saveCurrentUri(): Boolean {
-    val uri = boundSaveUri ?: return false
-    return try {
-        val finalConfig = repo.saveAsZip(config, uri) ?: return false
-        config = finalConfig
-        repo.autosave(config)
-        markSaved()
-        true
-    } catch (_: Throwable) { 
-        false 
-    }
+fun AppViewModel.markSaved() {
+    hasUnsavedChanges = false
+    showUnsavedBanner = false
 }
 
 fun AppViewModel.onUserSave(uri: Uri): Boolean {

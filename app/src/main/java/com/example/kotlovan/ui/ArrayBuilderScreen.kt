@@ -14,18 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +43,9 @@ import com.example.kotlovan.vm.autosave
 import com.example.kotlovan.vm.save
 import com.example.kotlovan.vm.setBuilderScale
 import com.example.kotlovan.vm.updateLastCell
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ArrayBuilderScreen(
@@ -53,18 +54,16 @@ fun ArrayBuilderScreen(
 ) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(aux) { vm.useAux = aux }
 
-    // Инициализируем зум из ViewModel (уникальный для каждого массива)
     var scale by remember(aux) { mutableStateOf(vm.active.builderScale) }
     var offset by remember(aux) { mutableStateOf(Offset.Zero) }
     
     var longPressMode by remember { mutableStateOf(false) }
     var isMergeMode by remember { mutableStateOf(false) }
     var selectedForSwap by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
-    var showNameDialog by remember { mutableStateOf(false) }
-    var fileName by remember { mutableStateOf("array.zip") }
     var localCurrent by remember(aux) { mutableStateOf<Triple<Int, Int, Int>?>(null) }
     var centeredOnKey by remember(aux) { mutableStateOf("") }
     var expandedStacks by remember(aux) { mutableStateOf(setOf<Pair<Int, Int>>()) }
@@ -82,8 +81,15 @@ fun ArrayBuilderScreen(
                     uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            if (vm.save(uri)) Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-            else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+            
+            // Сохранение в фоновом потоке, чтобы не вешать UI
+            scope.launch(Dispatchers.IO) {
+                val success = vm.save(uri)
+                withContext(Dispatchers.Main) {
+                    if (success) Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -107,7 +113,6 @@ fun ArrayBuilderScreen(
         val cellGapPx = with(density) { CELL_GAP.dp.toPx() }
         val step = cellSizePx + cellGapPx
 
-        // Правило 3: Центрирование текущей ячейки с учетом масштаба
         LaunchedEffect(aux, vm.active.lastRow, vm.active.lastCol, vm.active.lastDepth) {
             val key = "${vm.active.lastRow},${vm.active.lastCol},${vm.active.lastDepth}"
             if (centeredOnKey == key) return@LaunchedEffect
@@ -120,7 +125,6 @@ fun ArrayBuilderScreen(
             val cx = (vm.active.lastCol - cFrom) * step + cellSizePx / 2f
             val cy = (vm.active.lastRow - rFrom) * step + cellSizePx / 2f
             
-            // ВАЖНО: умножаем на newScale, иначе при зуме центр будет улетать
             offset = Offset(containerW / 2f - cx * newScale, containerH / 2f - cy * newScale)
         }
 
@@ -134,7 +138,7 @@ fun ArrayBuilderScreen(
                         onTransform = { vp -> 
                             scale = vp.scale
                             offset = vp.offset
-                            vm.setBuilderScale(vp.scale) // Сохраняем зум
+                            vm.setBuilderScale(vp.scale)
                         },
                         onSwipe = { _, _ -> },
                         minScale = 0.2f, maxScale = 5f,
@@ -246,7 +250,7 @@ fun ArrayBuilderScreen(
                         modifier = Modifier.weight(1f).height(56.dp)
                     ) { Text("Просмотр") }
                     Button(
-                        onClick = { showNameDialog = true },
+                        onClick = { saveLauncher.launch("array.zip") }, // Прямой вызов SAF без диалога
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4CAF50), contentColor = Color.White
                         ),
@@ -256,29 +260,6 @@ fun ArrayBuilderScreen(
                 }
             }
         }
-    }
-
-    if (showNameDialog) {
-        AlertDialog(
-            onDismissRequest = { showNameDialog = false },
-            title = { Text("Название сохранения") },
-            text = {
-                OutlinedTextField(
-                    value = fileName, onValueChange = { fileName = it },
-                    label = { Text("Имя файла") }, singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showNameDialog = false
-                    val name = if (fileName.endsWith(".zip")) fileName else "$fileName.zip"
-                    saveLauncher.launch(name)
-                }) { Text("Сохранить") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNameDialog = false }) { Text("Отмена") }
-            }
-        )
     }
 
     DisposableEffect(Unit) { 

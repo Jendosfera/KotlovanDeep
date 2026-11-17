@@ -1,15 +1,5 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.vm.savePhotoArchive
-import com.example.kotlovan.vm.loadPhotoArchive
-import com.example.kotlovan.vm.updateCell
-import com.example.kotlovan.vm.setGlobalViewport
-import com.example.kotlovan.vm.updateLastCell
-import com.example.kotlovan.vm.autosave
-import com.example.kotlovan.vm.setComments
-import com.example.kotlovan.vm.setIconSettings
-import com.example.kotlovan.vm.setRowLabel
-import com.example.kotlovan.vm.setColLabel
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,6 +54,16 @@ import com.example.kotlovan.util.Viewport
 import com.example.kotlovan.util.clampOffset
 import com.example.kotlovan.util.detectViewerGestures
 import com.example.kotlovan.vm.AppViewModel
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.loadPhotoArchive
+import com.example.kotlovan.vm.savePhotoArchive
+import com.example.kotlovan.vm.setColLabel
+import com.example.kotlovan.vm.setComments
+import com.example.kotlovan.vm.setGlobalViewport
+import com.example.kotlovan.vm.setIconSettings
+import com.example.kotlovan.vm.setRowLabel
+import com.example.kotlovan.vm.updateCell
+import com.example.kotlovan.vm.updateLastCell
 import kotlinx.coroutines.delay
 import java.util.UUID
 import kotlin.math.abs
@@ -94,8 +94,6 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
     var labelDialog by remember { mutableStateOf<Pair<Boolean, Int>?>(null) }
     var labelText by remember { mutableStateOf("") }
     val flashlight = remember { Flashlight(ctx) }
-    
-    UnsavedMonitor(vm)
 
     LaunchedEffect(Unit) {
         if (vm.active.cell(row, col, depth) == null) {
@@ -268,6 +266,9 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
             offsetX = clamped.x; offsetY = clamped.y
             savedRow = row; savedCol = col
             swipeDir = SwipeDir.NONE
+            
+            // Фиксируем текущую ячейку при успешном восстановлении
+            vm.updateLastCell(row, col, depth)
         }
 
         val cornerPx = with(density) { 80.dp.toPx() }
@@ -364,7 +365,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                                     persistViewport()
                                     swipeDir = dir
                                     row = nr; col = nc; depth = 0
-                                    vm.updateLastCell(nr, nc, 0) // Правило 4г: свайп меняет текущую ячейку
+                                    vm.updateLastCell(nr, nc, 0)
                                 }
                             }
                         },
@@ -447,7 +448,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     if (inLinkMode) returnFromLink()
                     else {
                         persistViewport()
-                        vm.updateLastCell(row, col, depth) // Сохраняем при выходе
+                        vm.updateLastCell(row, col, depth)
                         vm.autosave()
                         val target = if (vm.useAux) "builder?aux=true" else "builder?aux=false"
                         if (!nav.popBackStack(target, false)) nav.navigate(target) { popUpTo("menu") }
@@ -468,16 +469,14 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     depth = newDepth
                     savedRow = -1; savedCol = -1
                     pendingJump = null
-                    vm.updateLastCell(row, col, newDepth) // Правило 4г: смена слоя
+                    vm.updateLastCell(row, col, newDepth)
                 },
                 onToggleArray = {
                     persistViewport()
-                    val oldRow = row
-                    val oldCol = col
                     vm.useAux = !vm.useAux
                     val t = vm.active
+                    // При переключении всегда идем на последнюю ячейку целевого массива
                     val target: Pair<Int, Int> = when {
-                        t.cell(oldRow, oldCol, 0) != null -> oldRow to oldCol
                         t.cell(t.lastRow, t.lastCol, 0) != null -> t.lastRow to t.lastCol
                         t.cells.isNotEmpty() -> {
                             val firstKey = t.cells.keys.minByOrNull { k ->
@@ -496,7 +495,7 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     savedRow = -1; savedCol = -1
                     row = target.first; col = target.second; depth = 0
                     pendingJump = null
-                    vm.updateLastCell(row, col, depth) // Правило 3а/4г: переключение массива
+                    // updateLastCell вызовется в LaunchedEffect при успешном восстановлении
                 },
                 onMenuOpenToggle = { menuOpen = !menuOpen },
                 onMenuDismiss = { menuOpen = false },
@@ -536,12 +535,12 @@ fun ViewerScreen(nav: NavHostController, vm: AppViewModel) {
                     onRowClick = { r -> 
                         persistViewport()
                         row = r; depth = 0 
-                        vm.updateLastCell(r, col, 0) // Правило 4г: нажатие на строку
+                        vm.updateLastCell(r, col, 0)
                     },
                     onColClick = { c -> 
                         persistViewport()
                         col = c; depth = 0 
-                        vm.updateLastCell(row, c, 0) // Правило 4г: нажатие на столбец
+                        vm.updateLastCell(row, c, 0)
                     },
                     onRowLong = { r -> labelDialog = true to r; labelText = vm.active.rowLabels[r] ?: "" },
                     onColLong = { c -> labelDialog = false to c; labelText = vm.active.colLabels[c] ?: "" },

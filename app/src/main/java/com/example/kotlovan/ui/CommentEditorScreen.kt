@@ -1,11 +1,5 @@
 package com.example.kotlovan.ui
 
-import com.example.kotlovan.vm.updatePin
-import com.example.kotlovan.vm.autosave
-import com.example.kotlovan.vm.onUserSave
-import com.example.kotlovan.vm.saveCurrentUri
-import com.example.kotlovan.vm.movePinBetweenStores
-import com.example.kotlovan.vm.deletePin
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
@@ -58,6 +52,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +65,14 @@ import androidx.navigation.NavHostController
 import com.example.kotlovan.data.CommentIconType
 import com.example.kotlovan.data.CommentPhoto
 import com.example.kotlovan.vm.AppViewModel
+import com.example.kotlovan.vm.autosave
+import com.example.kotlovan.vm.deletePin
+import com.example.kotlovan.vm.movePinBetweenStores
+import com.example.kotlovan.vm.onUserSave
+import com.example.kotlovan.vm.updatePin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private val PresetColors = listOf(
@@ -87,6 +90,7 @@ fun CommentEditorScreen(
     val cell = vm.cell(row, col, depth) ?: return
     val pin = cell.comments.firstOrNull { it.id == id } ?: return
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val key = vm.active.key(row, col, depth)
 
     val isPhotoComment = remember(vm.config.photoComments, id) {
@@ -114,7 +118,6 @@ fun CommentEditorScreen(
         ))
     }
 
-    // Дебаунс-обновление config в памяти + SharedPreferences
     LaunchedEffect(title, text, shortLabel, color, iconType, photos, rating) {
         kotlinx.coroutines.delay(400)
         applyToMemory()
@@ -128,10 +131,7 @@ fun CommentEditorScreen(
         }
     }
 
-    // Монитор автосохранения раз в 30 сек
-    UnsavedMonitor(vm)
-
-    // SAF лончер — используется, если boundSaveUri ещё не задан
+    // SAF лончер для сохранения. Сохранение в фоне.
     val zipSaver = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
@@ -141,10 +141,12 @@ fun CommentEditorScreen(
                     uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            if (vm.onUserSave(uri)) {
-                Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+            scope.launch(Dispatchers.IO) {
+                val success = vm.onUserSave(uri)
+                withContext(Dispatchers.Main) {
+                    if (success) Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -152,16 +154,8 @@ fun CommentEditorScreen(
     fun saveWithZip() {
         applyToMemory()
         vm.autosave()
-        if (vm.boundSaveUri != null) {
-            if (vm.saveCurrentUri()) {
-                Toast.makeText(ctx, "Сохранено", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(ctx, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            // URI ещё не задан — открываем SAF
-            zipSaver.launch("array.zip")
-        }
+        // Всегда открываем SAF, название предложит система
+        zipSaver.launch("array.zip")
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -253,8 +247,6 @@ fun CommentEditorScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        UnsavedBanner(vm)
-
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().padding(8.dp).verticalScroll(rememberScrollState())) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
